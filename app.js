@@ -1,4 +1,3 @@
-
 'use strict';
 const FS = k => (DATA && DATA.fields[k] && DATA.fields[k].short) || k;
 const NM = t => t == null ? t : String(t).replace(/(^|[^A-Za-z0-9_\-])([DXYZ])(?![A-Za-z0-9_])/g, (m, p, l) => p + FS(l));
@@ -7,7 +6,7 @@ const NM = t => t == null ? t : String(t).replace(/(^|[^A-Za-z0-9_\-])([DXYZ])(?
    Helpers
    ============================================================ */
 const $ = (s, r = document) => r.querySelector(s);
-const FIELDS = ['D', 'X', 'Y', 'Z'];
+const FIELDS = ['Y', 'X', 'Z', 'D']; // порядок отображения: ТШО, НКОК, КПО, Дунга
 const FC = k => `var(--${DATA.fields[k].color})`;
 const FN = k => DATA.fields[k].name;
 const MN = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -1538,5 +1537,3 @@ function startApp() {
   });
   setTimeout(() => pw.focus(), 300);
 })();
-
-
