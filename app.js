@@ -248,7 +248,7 @@ function srcNote(t) { return `<div class="src">Источник: ${NM(t)}</div>`
    ============================================================ */
 const TABS = [
   { id: 'geo', t: 'Геология' }, { id: 'prod', t: 'Добыча' }, { id: 'mk', t: 'Маркетинг' }, { id: 'en', t: 'Энергетика' },
-  { id: 'eco', t: 'Экология' }, { id: 'rel', t: 'Надёжность' }, { id: 'lc', t: 'Местное содержание' }, { id: 'econ', t: 'Экономика' }];
+  { id: 'eco', t: 'Экология' }, { id: 'rel', t: 'Надёжность' }, { id: 'lc', t: 'Местное содержание' }, { id: 'econ', t: 'Экономика' }, { id: 'proj', t: 'Проекты' }];
 const S = { tab: 'geo', field: 'all', sub: {} };
 function readHash() {
   const [t, f] = location.hash.replace('#', '').split('/');
@@ -493,7 +493,6 @@ RENDER.prod = {
       table([{ t: 'Продукт' }, { t: 'Ед. изм.' }, { t: 'План', v: true }, { t: 'Факт', v: true }, { t: 'Откл.', v: true }, { t: 'Выполнение', v: true }, { t: 'План 2026', v: true }, { t: 'Факт 2025', v: true }], rows);
     if (p.summary) html += `<h3 class="sub-h">${p.summary.title}</h3>` + table(p.summary.cols.map((c, i) => ({ t: c, v: i >= 2 && i <= 7 })),
       p.summary.rows.map(r => ({ cells: [esc(r[0]), esc(r[1]), fmt(r[2], 2), fmt(r[3], 2), fmt(r[4], 2), (r[5] >= 0 ? '+' : '') + fmt(r[5], 3), fmt(r[6], 2), (r[7] >= 0 ? '+' : '') + fmt(r[7], 3), `<span class="txt">${esc(r[8])}</span>`] })));
-    if (p.projects && p.projects.length) html += `<h3 class="sub-h">Проекты · ${FS(k)}</h3><div class="proj">${p.projects.map(pr => `<div class="pcard"><h4>${esc(pr.name)}</h4>${pr.desc ? `<p class="d">${esc(pr.desc)}</p>` : ''}${pr.status ? `<div class="st">${esc(pr.status)}</div>` : ''}${pr.notes ? `<details><summary>Основные моменты и риски</summary><p>${esc(pr.notes)}</p></details>` : ''}${pr.done ? `<details><summary>Завершённые проекты</summary><p>${esc(pr.done)}</p></details>` : ''}</div>`).join('')}</div>`;
     const src = { D: 'книга D, листы «Добыча», «Добыча 1», «Добыча 2».', X: 'книга X, листы «Добыча 2025», «Добыча др. года», «СКП Проекты».', Y: 'книга Y, лист «Добыча Все».', Z: `книга Z, листы «Добыча 2025», «Добыча», «${FS('Z')} Другие года».` }[k];
     return `<section>${html}${srcNote(src)}</section>`;
   },
@@ -1660,6 +1659,50 @@ RENDER.econ = {
   }
 };
 
+/* ============================================================
+   Проекты: отдельная вкладка
+   ============================================================ */
+const pjNorm = t => String(t || '').toLowerCase().replace(/[\s\-–—.()«»"]/g, '');
+function pjBudget(k, name) {
+  const e = DATA.econ && DATA.econ[k]; if (!e) return null;
+  const n = pjNorm(name);
+  const r = e.grp.rows.find(x => !/^(Капитальн|Эксплуатац|Операц|Удельн|Прочие)/.test(x.name) && (n.includes(pjNorm(x.name)) || pjNorm(x.name).includes(n)));
+  return r ? { row: r, period: e.grp.period } : null;
+}
+function pjBudgetHTML(b) {
+  if (!b) return '';
+  const r = b.row, q = r.ytdPlan ? r.ytdFact / r.ytdPlan : null;
+  return `<div class="pj-b"><span><i>План 2026</i><b>${r.plan == null ? '—' : fmtF(r.plan, 1)}</b> млн $</span><span><i>План ${esc(b.period)}</i><b>${r.ytdPlan == null ? '—' : fmtF(r.ytdPlan, 1)}</b> млн $</span><span><i>Факт ${esc(b.period)}</i><b>${r.ytdFact == null ? '—' : fmtF(r.ytdFact, 1)}</b> млн $</span>${q != null ? `<span class="pj-q">${pill(q, false)}</span>` : ''}</div>`;
+}
+const pjText = t => esc(t).replace(/\s*·\s*/g, '<br>· ').replace(/^<br>/, '');
+RENDER.proj = {
+  field(k) {
+    const P = DATA.prod[k].projects || [];
+    let html = secHead(`Проекты · ${FN(k)}`, 'Описание, текущий статус, основные моменты и риски. Бюджет 2026 года — из таблицы ГРПиБ, если проект там выделен отдельной строкой.');
+    if (!P.length) html += `<p class="note">По проекту в книге нет описаний проектов.</p>`;
+    html += `<div class="pj-list">${P.map((p, i) => { const b = pjBudget(k, p.name); return `<article class="pj-card" style="--c:${FC(k)}">
+      <header><span class="pj-n">${i + 1}</span><h3>${esc(p.name)}</h3></header>
+      ${pjBudgetHTML(b)}
+      ${p.desc ? `<div class="pj-sec"><span class="pj-k">Описание</span><p>${pjText(p.desc)}</p></div>` : ''}
+      ${p.status ? `<div class="pj-sec pj-st"><span class="pj-k">Оценка и статус</span><p>${pjText(p.status)}</p></div>` : ''}
+      ${p.notes ? `<details class="pj-sec" open><summary class="pj-k">Основные моменты и риски</summary><p>${pjText(p.notes)}</p></details>` : ''}
+      ${p.done ? `<details class="pj-sec"><summary class="pj-k">Завершённые проекты</summary><p>${pjText(p.done)}</p></details>` : ''}
+    </article>`; }).join('')}</div>`;
+    return `<section>${html}${srcNote(`книга ${FS(k)}, лист «Проекты»; бюджет — лист «ГРПиБ таблица».`)}</section>`;
+  },
+  all() {
+    const tot = sum(FIELDS.map(k => (DATA.prod[k].projects || []).length));
+    let html = secHead('Проекты · все месторождения', 'Ключевые проекты расширения и развития. Нажмите на проект, чтобы открыть подробности по месторождению.');
+    html += kpis([{ l: 'Проектов всего', v: String(tot), s: 'по данным книг' }].concat(FIELDS.map(k => ({ l: FS(k), v: String((DATA.prod[k].projects || []).length), s: (DATA.prod[k].projects || []).map(p => p.name.replace(/\s*\(.*$/, '')).join(', ') || '—' }))));
+    FIELDS.forEach(k => {
+      const P = DATA.prod[k].projects || []; if (!P.length) return;
+      html += `<h3 class="sub-h"><span class="dot" style="background:${FC(k)};margin-right:8px"></span>${esc(FN(k))}</h3><div class="pj-grid">${P.map(p => { const b = pjBudget(k, p.name), first = (p.desc || p.status || p.notes || '').replace(/\s+/g, ' ').trim();
+        return `<button type="button" class="pj-mini" data-goto="${k}" style="--c:${FC(k)}"><h4>${esc(p.name)}</h4>${b ? `<span class="pj-mb">Бюджет 2026: ${fmtF(b.row.plan, 1)} млн $ · факт ${esc(b.period)}: ${fmtF(b.row.ytdFact, 1)}</span>` : ''}<p>${esc(first.length > 230 ? first.slice(0, 228) + '…' : first)}</p><span class="pj-more">Подробнее →</span></button>`; }).join('')}</div>`;
+    });
+    return `<section>${html}${srcNote('листы «Проекты» каждой книги; бюджет — «ГРПиБ таблица».')}</section>`;
+  }
+};
+
 /* --- справочная информация по месторождению --- */
 function refRows(rows) { return `<dl class="ref-dl">${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`; }
 function refPanel(sec, k) {
@@ -1678,7 +1721,7 @@ function refPanel(sec, k) {
 /* ============================================================
    Выгрузка справки: PDF (печать) и PowerPoint (редактируемые таблицы и диаграммы)
    ============================================================ */
-const EXP_SECTIONS = [['geo', 'Геология'], ['prod', 'Добыча'], ['mk', 'Маркетинг'], ['en', 'Энергетика'], ['eco', 'Экология'], ['rel', 'Надёжность'], ['lc', 'Местное содержание'], ['econ', 'Экономика']];
+const EXP_SECTIONS = [['geo', 'Геология'], ['prod', 'Добыча'], ['mk', 'Маркетинг'], ['en', 'Энергетика'], ['eco', 'Экология'], ['rel', 'Надёжность'], ['lc', 'Местное содержание'], ['econ', 'Экономика'], ['proj', 'Проекты']];
 const FIELD_HEX = { Y: '0D3B66', X: '2C7BB6', Z: '6FB1DC', D: '8A9BB0' };
 const asofText = () => { const l = DATA.prod.D.last; return `${MNF[+l.slice(5) - 1]} ${l.slice(0, 4)}`; };
 
@@ -1854,6 +1897,11 @@ async function exportPPTX(secs) {
       const yrs = [...new Set(FIELDS.flatMap(k => DATA.econ[k].cash.rows.map(r => r.y)))].filter(y => y >= 2010 && y <= 2025).sort();
       s2.addChart(pptx.ChartType.bar, FIELDS.map((k, i) => { const C = DATA.econ[k].cash, j = C.cols.findIndex(c => /Республики/.test(c)); return { name: short[i], labels: yrs.map(String), values: yrs.map(y => { const r = C.rows.find(x => x.y === y); return r && j >= 0 ? (r.v[j] || 0) : 0; }) }; }),
         { x: 0.5, y: 1.4, w: 12.3, h: 5.4, barGrouping: 'stacked', chartColors: colors, showLegend: true, legendPos: 'b', legendFontFace: F, catAxisLabelFontFace: F, valAxisLabelFontFace: F, valAxisLabelFormatCode: '# ##0' });
+    }
+    if (t === 'proj') {
+      const rows = FIELDS.flatMap((k, i) => (DATA.prod[k].projects || []).map(p => { const b = pjBudget(k, p.name); const st = (p.status || p.notes || p.desc || '').replace(/\s+/g, ' ').trim(); return [short[i], p.name, b && b.row.plan != null ? fmtF(b.row.plan, 1) : '—', b && b.row.ytdFact != null ? fmtF(b.row.ytdFact, 1) : '—', st.length > 170 ? st.slice(0, 168) + '…' : st]; }));
+      const sl = tSlide('Ключевые проекты', 'бюджет 2026, млн $ — из таблицы ГРПиБ');
+      tbl(sl, ['Проект', 'Название', 'План 2026', 'Факт с нач. года', 'Статус / основные моменты'], rows, { colW: [1.2, 2.6, 1.2, 1.4, 5.93], fs: 9, left: true });
     }
     if (t === 'lc') {
       const sl = tSlide('Местное содержание: доля МС в закупках', 'последний доступный период');
