@@ -888,3 +888,9 @@ tr.grp-main td:nth-child(2),tr.grp-sub td:nth-child(2){white-space:nowrap}
 @media (prefers-reduced-motion:reduce){.pj2,.pj-chip,.pjb-row i b,.pj-tl-y,.pg-row,.pg-span,.pj-mbar i,.pj-mini{animation:none!important}}
 .authors{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px;padding-top:12px;border-top:1px solid rgb(255 255 255/.15);font-size:13px;color:#cfe3f3}
 .authors .au-org{font-weight:700;color:#fff;margin-right:6px}
+
+/* показатели: денежный поток — жирным, доли (%) — курсивом */
+tr.ind-cf td{font-weight:800;background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+tr.ind-cf td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+tr.ind-pct td{font-style:italic;color:var(--ink-2)}
+.empty-note{display:grid;place-items:center;min-height:180px;padding:20px;text-align:center;color:var(--muted);font-size:13.5px;border:1px dashed var(--rule);border-radius:10px}

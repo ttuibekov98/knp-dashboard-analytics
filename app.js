@@ -1704,8 +1704,8 @@ function capexOpex(k) {
 `;
 }
 function grpTable(k) {
-  const g = DATA.econ[k].grp, rows = g.rows.filter(r => !/(баррель|тонну)/.test(r.name));
-  const fx = rows.some(r => r.fixed), d = () => 1;
+  const g = DATA.econ[k].grp, rows = g.rows;
+  const fx = rows.some(r => r.fixed), d = r => /^\$/.test(r.unit) ? 2 : 1;
   const isMain = r => /^(Капитальные затраты|Эксплуатационные расходы|Операционные расходы)/.test(r.name);
   return `<h3 class="sub-h">Исполнение ГРПиБ, ${esc(g.period)} 2026</h3>` + table(
     [{ t: 'Статья' }, { t: 'Ед.' }, { t: 'План 2026', v: true }, { t: `План ${g.period}`, v: true }, { t: `Факт ${g.period}`, v: true }, { t: 'Откл.', v: true }, { t: 'Исполнение', v: true }, { t: 'Комментарий' }],
@@ -1722,19 +1722,21 @@ function cashView(k, r) {
     cs.push({ name: c, color: n ? 'var(--c3)' : 'var(--c1)', values: rows.map(x => x.y <= 2025 ? x.v[i] : null), unit: 'млн $' });
     cs.push({ name: `${c} (план/прогноз)`, color: n ? 'var(--c3)' : 'var(--c1)', hatch: true, values: rows.map(x => x.y > 2025 ? x.v[i] : null), unit: 'млн $' }); });
   const main = chartBox({ title: 'Денежные потоки', cats: yrs, series: cs.filter(s => s.values.some(v => v != null)), xFmt: y => y, tipTitle: y => y + ' год' });
-  const share = chartBox({ title: 'Доля Республики', cats: yrs, series: [{ name: 'Доля Республики', color: 'var(--accent)', kind: 'line', width: 2.6, values: rows.map(x => x.share == null ? null : x.share * 100), unit: '%' }], xFmt: y => y, tipTitle: y => y + ' год' });
+  const share = chartBox({ title: 'Доля Республики', height: 320, cats: yrs, series: [{ name: 'Доля Республики', color: 'var(--accent)', kind: 'line', width: 2.6, values: rows.map(x => x.share == null ? null : x.share * 100), unit: '%' }], xFmt: y => y, tipTitle: y => y + ' год' });
   const tot = ii.map(i => sum(rows.map(x => x.v[i] || 0)));
   const d1 = donut(ii.map((i, n) => ({ label: C.cols[i].replace('Денежные потоки ', '').replace(/^./, c => c.toUpperCase()), v: Math.max(0, tot[n]), color: n ? 'var(--c3)' : 'var(--c1)', text: `${fm(tot[n])} млн $` })), { v: fm(sum(tot.map(v => Math.max(0, v)))), l: 'млн $' });
   const bud = ['Национальный фонд', 'Республиканский бюджет', 'Местный бюджет'].map(c => ({ c, i: C.cols.indexOf(c) })).filter(x => x.i >= 0);
-  const d2 = bud.length ? donut(bud.map((b, n) => ({ label: b.c, v: Math.max(0, sum(rows.map(x => x.v[b.i] || 0))), color: ['var(--c1)', 'var(--c2)', 'var(--c3)'][n], text: `${fm(sum(rows.map(x => x.v[b.i] || 0)))} млн $` })), { v: fm(sum(bud.map(b => sum(rows.map(x => x.v[b.i] || 0))))), l: 'млн $' }) : '';
+  const BL = { 'Национальный фонд': 'Нацфонд', 'Республиканский бюджет': 'Респ. бюджет', 'Местный бюджет': 'Местный бюджет' };
+  const d2 = bud.length ? donut(bud.map((b, n) => ({ label: BL[b.c] || b.c, v: Math.max(0, sum(rows.map(x => x.v[b.i] || 0))), color: ['var(--c1)', 'var(--c2)', 'var(--c3)'][n], text: `${fm(sum(rows.map(x => x.v[b.i] || 0)))} млн $` })), { v: fm(sum(bud.map(b => sum(rows.map(x => x.v[b.i] || 0))))), l: 'млн $' }) : '';
   return `${panel(`Денежные потоки ${k === 'Y' ? 'партнёров (дивиденды)' : 'Подрядчика'} и Республики`, 'млн $', main, 'Сплошная заливка — факт по 2025 год, штриховка — план и прогноз из книги.')}
-    <div class="grid2" style="margin-top:16px">${panel('Доля Республики в денежном потоке', '%', share)}${panel('Итого за период', 'млн $', d1, bud.length ? '' : 'Разбивки поступлений Республики по бюджетам в книге нет.')}</div>
-    ${d2 ? `<div style="margin-top:16px">${panel('Поступления Республики по бюджетам', 'млн $', d2)}</div>` : ''}`;
+    <div style="margin-top:16px">${panel('Доля Республики в денежном потоке', '%', share)}</div>
+    <div class="grid2" style="margin-top:16px">${panel('Итого за период', 'млн $', d1)}${panel('Поступления Республики по бюджетам', 'млн $', d2 || `<div class="empty-note">В книге ${esc(FS(k))} нет разбивки поступлений Республики по бюджетам (Нацфонд, республиканский и местный бюджеты).</div>`)}</div>`;
 }
 /* ---------- показатели ---------- */
 function indView(k) {
   const e = DATA.econ[k];
-  const etab = (t, title) => t ? `<h3 class="sub-h">${title}</h3>` + table([{ t: 'Показатель' }].concat(t.cols.map(c => ({ t: esc(c), v: true }))), t.rows.map(r => ({ cells: [esc(r[0])].concat(r.slice(1).map(v => v == null ? null : fmtF(v, Math.abs(v) < 100 ? 2 : 0))) }))) : '';
+  const kind = n => /^(Чистый )?[Дд]енежный поток (Подрядчика|Республики)/.test(n) ? 'ind-cf' : /^Доля /.test(n) ? 'ind-pct' : '';
+  const etab = (t, title) => t ? `<h3 class="sub-h">${title}</h3>` + table([{ t: 'Показатель' }].concat(t.cols.map(c => ({ t: esc(c), v: true }))), t.rows.map(r => ({ cls: kind(r[0]), cells: [esc(r[0])].concat(r.slice(1).map(v => v == null ? null : fmtF(v, Math.abs(v) < 100 ? 2 : 0))) }))) : '';
   let html = etab(e.contr, k === 'Y' ? `Основные показатели деятельности ${FS(k)}` : 'Экономические показатели Подрядчика');
   if (k === 'Y') html += `<p class="note">Единицы — как в книге: суммы в строках указаны в разных единицах (млн $ и тыс. $).</p>`;
   html += etab(e.rep, 'Экономические показатели Республики');
@@ -1755,7 +1757,7 @@ RENDER.econ = {
       ks.push({ l: `Эксплуатационные расходы, факт ${g.period}`, v: fmtF(opx.ytdFact, 1), u: 'млн $', s: rr(opx) != null ? `${pct(rr(opx), 0)} плана` : '' }); }
     const view = sub('eView' + k, 'scheme');
     const tabs = seg('eView' + k, [{ v: 'scheme', t: 'Схема раздела продукции' }, { v: 'capex', t: 'CAPEX / OPEX' }, { v: 'cash', t: 'Денежные потоки' }, { v: 'ind', t: 'Показатели' }], view, 'econ-tabs');
-    let html = secHead(`Экономика · ${FN(k)}`, 'Раздел продукции, исполнение бюджета, денежные потоки и экономические показатели.') + `<div class="econ-nav">${tabs}</div>` + kpis(ks);
+    let html = secHead(`Экономика · ${FN(k)}`, 'Раздел продукции, исполнение бюджета, денежные потоки и экономические показатели.') + `<div class="econ-nav">${tabs}</div>` + (view === 'capex' ? kpis(ks) : '');
     if (view === 'scheme') {
       const ys = DATA.econ[k].scheme.rows.map(x => String(x.y));
       const r = yrRange('sch' + k, ys, [ys[0], '2026']);
@@ -1774,8 +1776,8 @@ RENDER.econ = {
     const ys = mainYears();
     const r = yrRange('eAll', ys, [ys[0], '2026']);
     const rows = FIELDS.map(k => { const g = DATA.econ[k].grp; return { k, g, c: grpRow(k, /^Капитальн/), o: grpRow(k, /^(Эксплуатац|Операц)/), u: grpRow(k, /баррель/) }; });
-    const tbl = table([{ t: 'Месторождение' }, { t: 'Период' }, { t: 'Capex план', v: true }, { t: 'Capex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Opex план', v: true }, { t: 'Opex факт', v: true }, { t: 'Исполнение', v: true }],
-      rows.map(({ k, g, c, o, u }) => ({ cells: [`<button class="lnk" data-goto="${k}"><span class="dot" style="background:${FC(k)};margin-right:6px"></span>${FS(k)}</button>`, esc(g.period), c ? fmtF(c.ytdPlan, 1) : null, c ? fmtF(c.ytdFact, 1) : null, c && c.ytdPlan ? pill(c.ytdFact / c.ytdPlan, false) : null, o ? fmtF(o.ytdPlan, 1) : null, o ? fmtF(o.ytdFact, 1) : null, o && o.ytdPlan ? pill(o.ytdFact / o.ytdPlan, false) : null] })));
+    const tbl = table([{ t: 'Месторождение' }, { t: 'Период' }, { t: 'Capex план', v: true }, { t: 'Capex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Opex план', v: true }, { t: 'Opex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Удельные OPEX, $/барр.', v: true }],
+      rows.map(({ k, g, c, o, u }) => ({ cells: [`<button class="lnk" data-goto="${k}"><span class="dot" style="background:${FC(k)};margin-right:6px"></span>${FS(k)}</button>`, esc(g.period), c ? fmtF(c.ytdPlan, 1) : null, c ? fmtF(c.ytdFact, 1) : null, c && c.ytdPlan ? pill(c.ytdFact / c.ytdPlan, false) : null, o ? fmtF(o.ytdPlan, 1) : null, o ? fmtF(o.ytdFact, 1) : null, o && o.ytdPlan ? pill(o.ytdFact / o.ytdPlan, false) : null, u && u.ytdFact != null ? fmtF(u.ytdFact, 2) : null] })));
     const bars = (key, color, title) => chartBox({ title, cats: FIELDS.map(FS), series: [{ name: 'План с начала года', color: 'var(--c8)', hatch: true, values: rows.map(x => x[key] ? x[key].ytdPlan : null), unit: 'млн $' }, { name: 'Факт с начала года', color, values: rows.map(x => x[key] ? x[key].ytdFact : null), unit: 'млн $' }] });
     return `<section>${secHead('Финансово-экономические показатели', 'Выплаты Республике и доля КМГ за выбранный период; лифтинг затраты и исполнение бюджета 2026 года.', r.html)}
       <div class="econ-donuts">${mainDonut(r, 2, 'млн $', 'Выплаты Республике', 'По шаблону «Главная страница экономика КНП».')}${mainDonut(r, 3, 'млн $', 'ЧДП / дивиденды, доля КМГ', 'По шаблону «Главная страница экономика КНП». Отрицательная сумма (инвестиционная фаза) показана на диаграмме как 0.')}</div>
@@ -2053,8 +2055,8 @@ async function exportPPTX(secs) {
     }
     if (t === 'econ') {
       const sl = tSlide('Экономика: исполнение ГРПиБ с начала года', 'млн $');
-      tbl(sl, ['Месторождение', 'Период', 'Capex план', 'Capex факт', 'Исполн.', 'Opex план', 'Opex факт', 'Исполн.'],
-        FIELDS.map((k, i) => { const g = DATA.econ[k].grp, c = grpRow(k, /^Капитальн/), o = grpRow(k, /^(Эксплуатац|Операц)/), u = grpRow(k, /баррель/); return [names[i], g.period, c ? fmt(c.ytdPlan, 1) : '—', c ? fmt(c.ytdFact, 1) : '—', c && c.ytdPlan ? P(c.ytdFact / c.ytdPlan) : '—', o ? fmt(o.ytdPlan, 1) : '—', o ? fmt(o.ytdFact, 1) : '—', o && o.ytdPlan ? P(o.ytdFact / o.ytdPlan) : '—']; }), { colW: [3.53, 1.1, 1.3, 1.3, 1.2, 1.3, 1.3, 1.3], fs: 11 });
+      tbl(sl, ['Месторождение', 'Период', 'Capex план', 'Capex факт', 'Исполн.', 'Opex план', 'Opex факт', 'Исполн.', 'Удельные OPEX, $/барр.'],
+        FIELDS.map((k, i) => { const g = DATA.econ[k].grp, c = grpRow(k, /^Капитальн/), o = grpRow(k, /^(Эксплуатац|Операц)/), u = grpRow(k, /баррель/); return [names[i], g.period, c ? fmt(c.ytdPlan, 1) : '—', c ? fmt(c.ytdFact, 1) : '—', c && c.ytdPlan ? P(c.ytdFact / c.ytdPlan) : '—', o ? fmt(o.ytdPlan, 1) : '—', o ? fmt(o.ytdFact, 1) : '—', o && o.ytdPlan ? P(o.ytdFact / o.ytdPlan) : '—', u && u.ytdFact != null ? fmtF(u.ytdFact, 2) : '—']; }), { colW: [3.13, 1.0, 1.2, 1.2, 1.0, 1.2, 1.2, 1.0, 1.4], fs: 11 });
       const s2 = tSlide('Денежные потоки Республики по годам', 'млн $, факт по 2025 год');
       const yrs = [...new Set(FIELDS.flatMap(k => DATA.econ[k].cash.rows.map(r => r.y)))].filter(y => y >= 2010 && y <= 2025).sort();
       s2.addChart(pptx.ChartType.bar, FIELDS.map((k, i) => { const C = DATA.econ[k].cash, j = C.cols.findIndex(c => /Республики/.test(c)); return { name: short[i], labels: yrs.map(String), values: yrs.map(y => { const r = C.rows.find(x => x.y === y); return r && j >= 0 ? (r.v[j] || 0) : 0; }) }; }),
