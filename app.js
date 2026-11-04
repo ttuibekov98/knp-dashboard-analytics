@@ -1483,7 +1483,7 @@ function schemeSVG(k, r) {
     E('rec', 'capex', null, 'left'); E('rec', 'opex', null, 'left');
     N('ncf', 220, R[5], 300, 58, 'Чистый денежный поток Подрядчика', ncf, 'ct2');
     E('rec', 'ncf', null);
-    N('tax', 600, R[4] - 30, 250, 46, 'Налоги (по доле КМГК)', tax, 'st'); N('bon', 600, R[4] + 26, 250, 46, 'Бонусы', bon, 'st'); N('soc', 600, R[4] + 82, 250, 46, 'Соцпроекты', soc, 'st');
+    N('tax', 600, R[4] - 30, 250, 46, `Налоги (по доле ${KMGK()})`, tax, 'st'); N('bon', 600, R[4] + 26, 250, 46, 'Бонусы', bon, 'st'); N('soc', 600, R[4] + 82, 250, 46, 'Соцпроекты', soc, 'st');
     E('rec', 'tax', null, 'right'); E('rec', 'bon', null, 'right'); E('rec', 'soc', null, 'right');
     N('state', 900, R[4] + 10, 260, 62, 'Государство', state, 'st2');
     ['tax', 'bon', 'soc', 'pos'].forEach(x => E(x, 'state', null, x === 'pos' ? 'down' : 'right'));
@@ -1569,7 +1569,7 @@ function flowModel(k, r) {
     E('profit', 'pos', pos); E('profit', 'poc', poc);
     N('rec', 3 + c0, 'Поступления Подрядчика', rec, 'flow', 'Cost Oil + Profit Oil Подрядчика');
     E('cost', 'rec', cost); E('poc', 'rec', poc);
-    N('tax', 4 + c0, 'Налоги (по доле КМГК)', tax, 'gov'); N('bon', 4 + c0, 'Бонусы', bon, 'gov'); N('soc', 4 + c0, 'Соцпроекты', soc, 'gov');
+    N('tax', 4 + c0, `Налоги (по доле ${KMGK()})`, tax, 'gov'); N('bon', 4 + c0, 'Бонусы', bon, 'gov'); N('soc', 4 + c0, 'Соцпроекты', soc, 'gov');
     N('capex', 4 + c0, 'Capex', capex, 'cost'); N('opex', 4 + c0, 'Opex', opex, 'cost'); N('ncf', 4 + c0, 'ЧДП Подрядчика', ncf, 'flow', 'Чистый денежный поток Подрядчика: поступления − Capex − Opex − платежи государству');
     ['tax', 'bon', 'soc', 'capex', 'opex', 'ncf'].forEach(x => E('rec', x, nodes.find(n => n.id === x)?.val));
     N('state', 5 + c0, 'Государство, всего', state, 'gov', 'Profit Oil Государства + налоги + бонусы + соцпроекты' + (hasPrior ? ' + приоритетный платёж' : ''));
@@ -1827,12 +1827,9 @@ function pjTimeline(years, start) {
   const y0 = Math.min(2024, ...years), y1 = Math.max(...years, 2027), W = 100 / (y1 - y0);
   return `<div class="pj-tl"><span class="pj-k">Сроки, упомянутые в книге</span><div class="pj-tl-bar"><i class="now" style="left:${(2026.75 - y0) * W}%" title="сейчас"></i>${years.map((y, i) => `<span class="pj-tl-y${y === start ? ' st' : ''}" style="left:${(y - y0) * W}%;animation-delay:${300 + i * 90}ms">${y}</span>`).join('')}</div></div>`;
 }
-RENDER.proj = {
-  field(k) {
-    const P = DATA.prod[k].projects || [];
-    let html = secHead(`Проекты · ${FN(k)}`, 'Ключевые цифры, бюджет 2026 года и сроки. Полный текст из книги — в разделах «Подробнее».');
-    if (!P.length) html += `<p class="note">В книге нет описаний проектов.</p>`;
-    html += `<div class="pj-list">${P.map((p, i) => { const b = pjBudget(k, p.name), F = pjFacts(p);
+function RENDER_PROJ_BOOK(k) {
+  const P = DATA.prod[k].projects || [];
+  return `<div class="pj-list">${P.map((p, i) => { const b = pjBudget(k, p.name), F = pjFacts(p);
       return `<article class="pj2" style="--c:${FC(k)};--i:${i}">
       <header><span class="pj-n">${i + 1}</span><div><h3>${esc(p.name)}</h3><span class="pj-f">${esc(FS(k))}</span></div>${F.prog != null ? `<div class="pj-prog" title="прогресс работ">${rings([{ label: 'прогресс', r: Math.min(1, F.prog), text: pct(F.prog, 0), color: 'var(--accent)' }])}</div>` : ''}</header>
       ${F.f.length ? `<div class="pj-chips">${F.f.map((c, j) => `<div class="pj-chip" style="animation-delay:${200 + j * 80}ms"><span class="ic">${c.i}</span><span class="cl">${c.l}</span><b>${esc(c.v)}</b>${c.s ? `<small>${esc(c.s)}</small>` : ''}</div>`).join('')}</div>` : ''}
@@ -1845,27 +1842,110 @@ RENDER.proj = {
         ${p.notes ? `<details><summary>Основные моменты и риски</summary><p>${pjText(p.notes)}</p></details>` : ''}
         ${p.done ? `<details><summary>Завершённые проекты</summary><p>${pjText(p.done)}</p></details>` : ''}
       </div></article>`; }).join('')}</div>`;
-    return `<section>${html}${srcNote(`книга ${FS(k)}, лист «Проекты»; бюджет — лист «ГРПиБ таблица».`)}</section>`;
+}
+
+/* ============================================================
+   Проекты v3: данные из презентации «Инвпроекты ДКНП» + книги проектов
+   ============================================================ */
+const KMGK = () => (DATA.projDeck || {}).kmgDefault || 'КМГ';
+const PJ_STAGES = ['Изучение', 'Выбор концепции', 'Разработка', 'Реализация', 'Завершение', 'Завершён'];
+const PJ_SC = { 'Изучение': '#8291A5', 'Выбор концепции': '#F39B45', 'Разработка': '#2476B9', 'Реализация': '#20A675', 'Завершение': '#0FA3A3', 'Завершён': '#12304A' };
+const pjMoney = v => v == null ? '—' : `$${fmtF(v, v % 1 ? 1 : 0)} млн`;
+function pjDeck(k) { return ((DATA.projDeck || {}).fields || {})[k] || null; }
+function pjGrp(k, key) {
+  const e = DATA.econ && DATA.econ[k]; if (!e || !key) return null;
+  const n = pjNorm(key), r = e.grp.rows.find(x => pjNorm(x.name).includes(n));
+  return r ? { row: r, period: e.grp.period } : null;
+}
+function pjBook(k, name) { return name ? (DATA.prod[k].projects || []).find(p => p.name === name) : null; }
+function pjAll() {
+  const out = [];
+  FIELDS.forEach(k => {
+    const d = pjDeck(k);
+    if (d) d.forEach(p => out.push({ k, p, deck: true }));
+    else (DATA.prod[k].projects || []).forEach(b => out.push({ k, p: { id: b.name, name: b.name.replace(/\s*\(.*$/, ''), stage: /Акт ввода|проектную мощность/.test((b.desc || '') + (b.status || '')) ? 'Завершён' : 'Реализация', essence: '', status: [], book: b.name, finishY: null, _book: b }, deck: false }));
+  });
+  ((DATA.projDeck || {}).extra || []).forEach(p => out.push({ k: null, p, deck: true, extra: true }));
+  return out;
+}
+const pjStage = st => `<span class="pj-stage" style="--s:${PJ_SC[st] || '#8291A5'}">${esc(st)}</span>`;
+function pjFin(f) {
+  if (!f) return '';
+  const kl = f.kmgLabel || (DATA.projDeck || {}).kmgDefault || '', cell = (l, v, s, i) => `<div class="pf3" style="animation-delay:${150 + i * 80}ms"><span class="pf3-l">${l}</span><b>${v}</b>${s ? `<small>${s}</small>` : ''}</div>`;
+  const c = [];
+  if (f.capex != null) c.push(cell(f.capexFact ? 'CAPEX, факт' : 'CAPEX', pjMoney(f.capex), f.capexKmg != null ? `${pjMoney(f.capexKmg)} на долю ${kl}` : '', c.length));
+  if (f.npv != null) c.push(cell('NPV @10,68%', pjMoney(f.npv), f.npvKmg != null ? `${pjMoney(f.npvKmg)} на долю ${kl}` : '', c.length));
+  if (f.irr != null) c.push(cell('IRR', `${fmtF(f.irr, f.irr % 1 ? 1 : 0)}%`, '', c.length));
+  if (f.pp != null) c.push(cell('Окупаемость', `${f.pp} г.`, '', c.length));
+  return `<div class="pf3-grid">${c.join('')}</div>`;
+}
+function pjPhases(k) {
+  const P = ((DATA.projDeck || {}).phases || {})[k]; if (!P) return '';
+  const mx = Math.max(...P.map(p => p.tpd));
+  return panel('Основные фазы разработки месторождения', 'скважины и суточная добыча', `<div class="ph3">${P.map((p, i) => `${i ? '<span class="ph3-arr" aria-hidden="true">➜</span>' : ''}<div class="ph3-c" style="--i:${i}"><div class="ph3-h"><b>${esc(p.name)}</b><span>${esc(p.period)}</span></div>
+    <div class="ph3-w"><b class="cu">+${p.wells}</b> скважин<small>${esc(p.what)}</small></div>
+    <div class="ph3-bar"><i style="width:${p.tpd / mx * 100}%;animation-delay:${300 + i * 200}ms"></i></div>
+    <div class="ph3-t">до <b>${fmt(p.tpd)}</b> т нефти в сутки <small>${esc(p.bpd)}</small></div></div>`).join('')}</div>`);
+}
+function pjCard(k, p, i) {
+  const c = k ? FC(k) : '#8291A5', b = k ? pjGrp(k, p.grp) : null, book = k ? pjBook(k, p.book) : null;
+  const res = p.reserves ? `<div class="pj-res">${p.reserves.map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>${p.resNote ? `<p class="pj-resn">${esc(p.resNote)}</p>` : ''}` : '';
+  const prog = p.progress != null ? `<div class="pj-prog" title="прогресс">${rings([{ label: p.progressLabel || 'прогресс', r: p.progress, text: pct(p.progress, 0), color: PJ_SC[p.stage] }])}</div>` : '';
+  return `<article class="pj3" id="pj-${esc(p.id)}" style="--c:${c};--s:${PJ_SC[p.stage] || '#8291A5'};--i:${i}">
+    <header><div class="pj3-t"><h3>${esc(p.name)}${p.alias ? ` <small>${esc(p.alias)}</small>` : ''}</h3><div class="pj3-meta">${pjStage(p.stage)}${p.owner ? `<span class="pj-own">${esc(p.owner)}</span>` : ''}${p.finish ? `<span class="pj-fin">⏱ ${esc(p.finish)}</span>` : ''}</div></div>${prog}</header>
+    ${p.essence ? `<div class="pj-ess"><b>${esc(p.essence)}</b>${p.essenceSub ? `<span>${esc(p.essenceSub)}</span>` : ''}</div>` : ''}
+    ${p.effect ? `<div class="pj-eff"><span class="pj-k">Ожидаемый эффект</span><b>${esc(p.effect)}</b>${p.effectKmg ? `<small>${esc(p.effectKmg)}</small>` : ''}</div>` : ''}
+    ${pjFin(p.fin)}${res}${pjBudgetViz(b)}
+    ${p.status && p.status.length ? `<div class="pj-stl"><span class="pj-k">Текущий статус</span><ul>${p.status.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
+    <div class="pj-more-wrap">
+      ${p.scope ? `<details><summary>Объём работ</summary><ul class="pj-scope">${p.scope.map(t => `<li>${esc(t)}</li>`).join('')}</ul></details>` : ''}
+      ${book ? `<details><summary>Из книги проекта${book.name !== p.name ? ` («${esc(book.name)}»)` : ''}</summary>${book.desc ? `<p><b>Описание.</b> ${pjText(book.desc)}</p>` : ''}${book.status ? `<p><b>Оценка и статус.</b> ${pjText(book.status)}</p>` : ''}${book.notes ? `<p><b>Основные моменты и риски.</b> ${pjText(book.notes)}</p>` : ''}${book.done ? `<p><b>Завершённые проекты.</b> ${pjText(book.done)}</p>` : ''}</details>` : ''}
+    </div></article>`;
+}
+RENDER.proj = {
+  field(k) {
+    const D_ = pjDeck(k);
+    let html = secHead(`Проекты · ${FN(k)}`, D_ ? 'Стадия, суть, финансовые показатели и статус — по презентации «Инвпроекты ДКНП»; бюджет 2026 года — из ГРПиБ; тексты книги — в «Из книги проекта».' : 'Данные из книги проекта.');
+    html += pjPhases(k);
+    if (D_) html += `<div class="pj-list">${D_.map((p, i) => pjCard(k, p, i)).join('')}</div>`;
+    else html += RENDER_PROJ_BOOK(k);
+    return `<section>${html}${srcNote(D_ ? `презентация «Инвпроекты ДКНП»; книга ${FS(k)} — листы «Проекты», «ГРПиБ таблица».` : `книга ${FS(k)}, лист «Проекты».`)}</section>`;
   },
   all() {
-    const all = FIELDS.flatMap(k => (DATA.prod[k].projects || []).map(p => ({ k, p, b: pjBudget(k, p.name), F: pjFacts(p) })));
-    let html = secHead('Проекты · все месторождения', 'Ключевые проекты расширения и развития: цифры, бюджет и сроки. Нажмите на проект, чтобы открыть подробности.');
-    html += kpis([{ l: 'Проектов всего', v: String(all.length), s: 'по данным книг' }].concat(FIELDS.map(k => ({ l: FS(k), v: String(all.filter(x => x.k === k).length), s: all.filter(x => x.k === k).map(x => x.p.name.replace(/\s*\(.*$/, '')).join(', ') || '—' }))));
-    const wb = all.filter(x => x.b);
-    const bud = wb.length ? chartBox({ title: 'Бюджет проектов', cats: wb.map(x => x.p.name.replace(/\s*\(.*$/, '')), series: [{ name: 'План 2026', color: 'var(--c8)', hatch: true, values: wb.map(x => x.b.row.plan), unit: 'млн $' }, { name: 'План с начала года', color: 'var(--c3)', values: wb.map(x => x.b.row.ytdPlan), unit: 'млн $' }, { name: 'Факт с начала года', color: 'var(--c1)', values: wb.map(x => x.b.row.ytdFact), unit: 'млн $' }] }) : '';
-    const yrs = all.flatMap(x => x.F.years), y0 = Math.min(2024, ...yrs), y1 = Math.max(2030, ...yrs), Wd = 100 / (y1 - y0);
-    const gantt = `<div class="pj-gantt"><div class="pg-axis">${Array.from({ length: y1 - y0 + 1 }, (_, i) => y0 + i).filter((y, i) => i % 2 === 0 || (y === y1 && (y1 - y0) % 2 === 0)).map(y => `<span style="left:${(y - y0) * Wd}%">${y}</span>`).join('')}</div>${all.map((x, i) => `<button type="button" class="pg-row" data-goto="${x.k}" style="--c:${FC(x.k)};--i:${i}"><span class="pg-name"><span class="dot" style="background:${FC(x.k)}"></span>${esc(x.p.name.replace(/\s*\(.*$/, ''))}</span><span class="pg-track">${x.F.years.length ? `<i class="pg-span" style="left:${(Math.min(...x.F.years) - y0) * Wd}%;width:${Math.max(1.5, (Math.max(...x.F.years) - Math.min(...x.F.years)) * Wd)}%"></i>` : ''}${x.F.years.map(y => `<i class="pg-dot${y === x.F.start ? ' st' : ''}" style="left:${(y - y0) * Wd}%" title="${y}"></i>`).join('')}<i class="pg-now" style="left:${(2026.75 - y0) * Wd}%"></i></span></button>`).join('')}</div>`;
-    html += `<div class="grid2">${panel('Бюджет проектов 2026', 'млн $', bud || '<p class="note">Нет проектов с отдельной строкой в ГРПиБ.</p>', 'Проекты, выделенные отдельной строкой в таблице ГРПиБ.')}${panel('Сроки по проектам', 'годы, упомянутые в книгах', gantt, 'Крупная точка — ввод в эксплуатацию (по тексту книги), вертикальная линия — сегодня.')}</div>`;
+    const A = pjAll(), F = A.filter(x => x.p.fin);
+    const sum_ = key => sum(F.map(x => x.p.fin[key] || 0));
+    let html = secHead('Проекты · портфель', 'Инвестиционные проекты по стадиям, финансовым показателям и срокам. Нажмите на проект, чтобы открыть подробности.');
+    html += kpis([{ l: 'Проектов в портфеле', v: String(A.length), s: `${A.filter(x => x.p.stage === 'Реализация' || x.p.stage === 'Завершение').length} в реализации / завершении` },
+      { l: 'CAPEX проектов', v: fmt(sum_('capex')), u: 'млн $', s: `${F.length} проектов с оценкой` },
+      { l: 'NPV @10,68%', v: fmt(sum_('npv')), u: 'млн $', s: 'сумма по проектам с оценкой' },
+      { l: 'Медианный IRR', v: (() => { const v = F.map(x => x.p.fin.irr).filter(x => x != null).sort((a, b) => a - b); return v.length ? fmtF(v[Math.floor(v.length / 2)], 1) + '%' : '—'; })(), s: 'по проектам с оценкой' }]);
+    // воронка стадий
+    const pipe = `<div class="pj-pipe">${PJ_STAGES.map(st => { const L = A.filter(x => x.p.stage === st); return `<div class="pp-col" style="--s:${PJ_SC[st]}"><div class="pp-h">${esc(st)}<b>${L.length}</b></div>${L.map((x, i) => `<button type="button" class="pp-item" ${x.k ? `data-goto="${x.k}"` : ''} style="--c:${x.k ? FC(x.k) : '#8291A5'};animation-delay:${i * 90}ms"><span class="dot" style="background:${x.k ? FC(x.k) : '#8291A5'}"></span>${esc(x.p.name)}<small>${x.k ? esc(FS(x.k)) : esc(x.p.owner || '')}</small></button>`).join('')}</div>`; }).join('')}</div>`;
+    html += panel('Портфель по стадиям', '', pipe, 'От изучения к завершению. Цвет точки — месторождение.');
+    const names = F.map(x => x.p.name);
+    const cn = chartBox({ title: 'CAPEX и NPV', cats: names, series: [{ name: 'CAPEX', color: 'var(--c3)', values: F.map(x => x.p.fin.capex), unit: 'млн $' }, { name: 'NPV @10,68%', color: '#20A675', values: F.map(x => x.p.fin.npv ?? null), unit: 'млн $' }] });
+    const irr = F.filter(x => x.p.fin.irr != null).sort((a, b) => b.p.fin.irr - a.p.fin.irr);
+    const ib = hbars(irr.map(x => ({ label: `<span class="dot" style="background:${FC(x.k)};margin-right:6px"></span>${esc(x.p.name)}`, bars: [{ v: x.p.fin.irr, color: FC(x.k), text: `${fmtF(x.p.fin.irr, 1)}% · окуп. ${x.p.fin.pp}` }] })));
+    html += `<div class="grid2">${panel('CAPEX и NPV проектов', 'млн $', cn, 'CAPEX у завершённых проектов — фактический.')}${panel('IRR и окупаемость', '%', ib)}</div>`;
+    // сроки
+    const T = A.filter(x => x.p.finishY || (x.p.fin && x.p.fin.pp));
+    const y0 = 2022, y1 = 2042, Wd = 100 / (y1 - y0);
+    const gantt = `<div class="pj-gantt"><div class="pg-axis">${Array.from({ length: (y1 - y0) / 2 + 1 }, (_, i) => y0 + i * 2).map(y => `<span style="left:${(y - y0) * Wd}%">${y}</span>`).join('')}</div>${T.map((x, i) => { const f = x.p.finishY, pp = x.p.fin && x.p.fin.pp; const a = Math.min(...[f, pp].filter(Boolean)), b2 = Math.max(...[f, pp].filter(Boolean));
+      return `<button type="button" class="pg-row" ${x.k ? `data-goto="${x.k}"` : ''} style="--c:${x.k ? FC(x.k) : '#8291A5'};--i:${i}"><span class="pg-name"><span class="dot" style="background:${x.k ? FC(x.k) : '#8291A5'}"></span>${esc(x.p.name)}</span><span class="pg-track">${a !== b2 ? `<i class="pg-span" style="left:${(a - y0) * Wd}%;width:${(b2 - a) * Wd}%"></i>` : ''}${f ? `<i class="pg-dot st" style="left:${(f - y0) * Wd}%" title="${esc(x.p.finish || '')}"></i>` : ''}${pp ? `<i class="pg-pp" style="left:${(pp - y0) * Wd}%" title="окупаемость ${pp}"></i>` : ''}<i class="pg-now" style="left:${(2026.75 - y0) * Wd}%"></i></span></button>`; }).join('')}</div>`;
+    html += panel('Сроки: завершение и окупаемость', '', gantt, '● — завершение / ввод (или базовое проектирование для Актоты и Кайран), ◆ — год окупаемости, вертикальная линия — сегодня.');
     FIELDS.forEach(k => {
-      const P = all.filter(x => x.k === k); if (!P.length) return;
-      html += `<h3 class="sub-h"><span class="dot" style="background:${FC(k)};margin-right:8px"></span>${esc(FN(k))}</h3><div class="pj-grid">${P.map((x, i) => `<button type="button" class="pj-mini" data-goto="${k}" style="--c:${FC(k)};--i:${i}"><h4>${esc(x.p.name)}</h4>
-        ${x.F.f.length ? `<span class="pj-mchips">${x.F.f.slice(0, 3).map(c => `<span><em>${c.i}</em>${esc(c.v)}</span>`).join('')}</span>` : ''}
-        ${x.b ? `<span class="pj-mbar"><i style="width:${Math.min(100, Math.max(0, x.b.row.ytdPlan ? x.b.row.ytdFact / x.b.row.ytdPlan * 100 : 0))}%"></i></span><span class="pj-mb">Бюджет 2026: ${fmtF(x.b.row.plan, 1)} млн $ · факт ${esc(x.b.period)}: ${fmtF(x.b.row.ytdFact, 1)}</span>` : ''}
-        <p>${esc(x.F.summary)}</p><span class="pj-more">Подробнее →</span></button>`).join('')}</div>`;
+      const L = A.filter(x => x.k === k); if (!L.length) return;
+      html += `<h3 class="sub-h"><span class="dot" style="background:${FC(k)};margin-right:8px"></span>${esc(FN(k))}</h3><div class="pj-grid">${L.map((x, i) => `<button type="button" class="pj-mini" data-goto="${k}" style="--c:${FC(k)};--i:${i}"><h4>${esc(x.p.name)}</h4>${pjStage(x.p.stage)}
+        ${x.p.essence ? `<p class="pj-mess">${esc(x.p.essence)}</p>` : ''}
+        ${x.p.fin ? `<span class="pj-mchips">${x.p.fin.capex != null ? `<span><em>$</em>${pjMoney(x.p.fin.capex)}</span>` : ''}${x.p.fin.irr != null ? `<span><em>%</em>IRR ${fmtF(x.p.fin.irr, 1)}%</span>` : ''}${x.p.fin.pp ? `<span><em>↺</em>${x.p.fin.pp}</span>` : ''}</span>` : ''}
+        ${x.p.finish ? `<span class="pj-mb">⏱ ${esc(x.p.finish)}</span>` : ''}<span class="pj-more">Подробнее →</span></button>`).join('')}</div>`;
     });
-    return `<section>${html}${srcNote('листы «Проекты» каждой книги; бюджет — «ГРПиБ таблица».')}</section>`;
+    const X = ((DATA.projDeck || {}).extra || []);
+    if (X.length) html += `<h3 class="sub-h">Другие проекты портфеля</h3><div class="pj-list">${X.map((p, i) => pjCard(null, p, i)).join('')}</div>`;
+    return `<section>${html}${srcNote('презентация «Инвпроекты ДКНП»; книги проектов — листы «Проекты», «ГРПиБ таблица».')}</section>`;
   }
 };
+
 
 /* --- справочная информация по месторождению --- */
 function refRows(rows) { return `<dl class="ref-dl">${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`; }
@@ -2063,9 +2143,10 @@ async function exportPPTX(secs) {
         { x: 0.5, y: 1.4, w: 12.3, h: 5.4, barGrouping: 'stacked', chartColors: colors, showLegend: true, legendPos: 'b', legendFontFace: F, catAxisLabelFontFace: F, valAxisLabelFontFace: F, valAxisLabelFormatCode: '# ##0' });
     }
     if (t === 'proj') {
-      const rows = FIELDS.flatMap((k, i) => (DATA.prod[k].projects || []).map(p => { const b = pjBudget(k, p.name); const st = (p.status || p.notes || p.desc || '').replace(/\s+/g, ' ').trim(); return [short[i], p.name, b && b.row.plan != null ? fmtF(b.row.plan, 1) : '—', b && b.row.ytdFact != null ? fmtF(b.row.ytdFact, 1) : '—', st.length > 170 ? st.slice(0, 168) + '…' : st]; }));
-      const sl = tSlide('Ключевые проекты', 'бюджет 2026, млн $ — из таблицы ГРПиБ');
-      tbl(sl, ['Проект', 'Название', 'План 2026', 'Факт с нач. года', 'Статус / основные моменты'], rows, { colW: [1.2, 2.6, 1.2, 1.4, 5.93], fs: 9, left: true });
+      const A = pjAll();
+      const rows = A.map(x => [x.k ? FS(x.k) : (x.p.owner || ''), x.p.name, x.p.stage, x.p.fin && x.p.fin.capex != null ? fmt(x.p.fin.capex) : '—', x.p.fin && x.p.fin.npv != null ? fmt(x.p.fin.npv) : '—', x.p.fin && x.p.fin.irr != null ? fmtF(x.p.fin.irr, 1) + '%' : '—', x.p.fin && x.p.fin.pp ? String(x.p.fin.pp) : '—', x.p.finish || '—']);
+      const sl = tSlide('Портфель инвестиционных проектов', 'CAPEX и NPV — млн $; по презентации «Инвпроекты ДКНП»');
+      tbl(sl, ['Проект', 'Название', 'Стадия', 'CAPEX', 'NPV', 'IRR', 'Окуп.', 'Завершение'], rows, { colW: [1.3, 2.3, 1.6, 1.0, 1.0, 0.9, 0.8, 3.43], fs: 9, left: true });
     }
     if (t === 'lc') {
       const sl = tSlide('Местное содержание: доля МС в закупках', 'последний доступный период');
