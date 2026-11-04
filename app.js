@@ -684,9 +684,14 @@ RENDER.mk = {
       title: 'Цена КТК', cats: MONTHS26, series: ktk.map(k => { const d = DATA.mk[k].products[0].dirs.find(d => d.name === 'КТК'); return { name: FS(k), color: FC(k), kind: 'line', values: d.price.map(v => v || null), unit: '$/барр.' }; }),
       zero: false, xFmt: c => MN[+c.slice(5) - 1], tipTitle: c => mLong(c)
     });
+    const kv = FIELDS.filter(k => DATA.mk[k].products[0].dirs.some(d => d.name === 'КТК'));
+    const ktkVol = chartBox({ title: 'Реализация через КТК', cats: MONTHS26.slice(0, 9), series: kv.map(k => { const d = DATA.mk[k].products[0].dirs.find(d => d.name === 'КТК'); return { name: FS(k), color: FC(k), values: d.fact.slice(0, 9), unit: 'тыс. т' }; }), xFmt: c => MN[+c.slice(5) - 1], tipTitle: c => mLong(c),
+      tipExtra: i => tipRow('Итого через КТК', fmt(sum(kv.map(k => DATA.mk[k].products[0].dirs.find(d => d.name === 'КТК').fact[i] || 0))) + ' тыс. т') });
+    const ktkTot = hbars(kv.map(k => { const v = sum(DATA.mk[k].products[0].dirs.find(d => d.name === 'КТК').fact.slice(0, 9).map(x => x || 0)); return { label: `<span class="dot" style="background:${FC(k)};margin-right:6px"></span>${FS(k)}`, bars: [{ v, color: FC(k), text: fmt(v) + ' тыс. т' }] }; }));
     const exec = hbars(S2.map(({ k, st }) => ({ label: `<span class="dot" style="background:${FC(k)};margin-right:6px"></span>${FS(k)}`, bars: [{ v: st.r, color: FC(k), text: pct(st.r) }] })), { max: Math.max(1.2, ...S2.map(x => x.st.r)) });
     return `<section>${secHead('Маркетинг · все месторождения', 'Реализация нефти в 2026 году: выполнение плана и цены. Остальные продукты — во вкладке каждого месторождения.')}<div class="ops">${cards}</div>
       <div class="grid2">${panel('Цена реализации через КТК', '$/барр.', ktkChart, 'Y в сравнение не входит: его цена в источнике указана в $/т без разбивки по направлениям.')}${panel('Выполнение плана реализации нефти', `факт / план, ${ytdLabel(S2[0].st.li + 1)}`, exec)}</div>
+      <div class="grid2">${panel('Реализация нефти через КТК по месяцам', 'тыс. т', ktkVol, 'Факт по месяцам 2026 года, все проекты.')}${panel('Через КТК с начала года', 'тыс. т', ktkTot, `Сумма за ${ytdLabel(9)}.`)}</div>
       ${EXTRA.mkAll()}${srcNote('листы «маркетинг» каждой книги.')}</section>`;
   }
 };
@@ -1395,7 +1400,7 @@ function econOverview(r) {
 function liftChart() {
   const yr = sub('liftY', '2026'), j = yr === '2025' ? 1 : 2;
   const parts = ['Персонал', 'Ремонт', 'Прочие'], pal = ['var(--c6)', 'var(--c3)', 'var(--c1)'];
-  return panel('Лифтинговые затраты', '$/барр.', chartBox({ title: 'Лифтинг', cats: FIELDS.map(FS),
+  return panel('Лифтинг затраты', '$/барр.', chartBox({ title: 'Лифтинг', cats: FIELDS.map(FS),
     series: parts.map((p, i) => ({ name: p, color: pal[i], values: FIELDS.map(k => (DATA.econ[k].lift.find(r => r[0] === p) || [])[j] ?? null), unit: '$/барр.', stack: 'l' })) }),
     `${yr === '2025' ? 'Факт 2025 года' : 'План на 2026 год'}. Единицы в книгах не указаны, по смыслу — $/барр.`, seg('liftY', [{ v: '2025', t: '2025' }, { v: '2026', t: '2026' }], yr));
 }
@@ -1464,44 +1469,46 @@ function schemeSVG(k, r) {
     const rec = V(/^Поступления Подрядчика/), capex = V(/^Capex/), opex = V(/^Opex/), ncf = V(/^Чистый денежный поток/);
     const tax = V(/^Налоги/), bon = V(/^Бонусы/), soc = V(/^Соцпроекты/), state = V(/^Государство/);
     const hasPrior = prior != null && Math.abs(prior) > 0.5;
-    N('gross', 450, 10, 300, 66, 'Валовая выручка', gross, 'rev');
-    if (hasPrior) { N('prior', 870, 92, 280, 60, 'Приоритетный платёж', prior, 'st'); N('net', 300, 100, 300, 60, 'Чистая выручка', net, 'rev'); E('gross', 'net', ratio(net, gross)); E('gross', 'prior', ratio(prior, gross)); }
+    const R = [10, 124, 238, 352, 480, 600, 740];
+    N('gross', 450, R[0], 300, 62, 'Валовая выручка', gross, 'rev');
+    if (hasPrior) { N('prior', 880, R[1], 270, 58, 'Приоритетный платёж', prior, 'st'); N('net', 300, R[1], 300, 58, 'Чистая выручка', net, 'rev'); E('gross', 'net', ratio(net, gross)); E('gross', 'prior', ratio(prior, gross)); }
     const top = hasPrior ? 'net' : 'gross', base = hasPrior ? net : gross;
-    N('cost', 220, 190, 300, 60, 'Cost Oil', cost, 'ct'); N('profit', 600, 190, 290, 60, 'Profit Oil', prof, 'rev');
+    N('cost', 220, R[2], 300, 58, 'Cost Oil', cost, 'ct'); N('profit', 620, R[2], 290, 58, 'Profit Oil', prof, 'rev');
     E(top, 'cost', ratio(cost, base)); E(top, 'profit', ratio(prof, base));
-    N('poc', 560, 280, 300, 60, 'Profit Oil Подрядчика', poc, 'ct'); N('pos', 890, 280, 270, 60, 'Profit Oil Государства', pos, 'st');
+    N('poc', 580, R[3], 300, 58, 'Profit Oil Подрядчика', poc, 'ct'); N('pos', 900, R[3], 260, 58, 'Profit Oil Государства', pos, 'st');
     E('profit', 'poc', ratio(poc, prof)); E('profit', 'pos', ratio(pos, prof));
-    N('rec', 220, 400, 300, 66, 'Поступления Подрядчика', rec, 'ct2');
+    N('rec', 220, R[4], 300, 62, 'Поступления Подрядчика', rec, 'ct2');
     E('cost', 'rec', null); E('poc', 'rec', null, 'side');
-    N('capex', 0, 384, 190, 50, 'Capex', capex, 'cx'); N('opex', 0, 444, 190, 50, 'Opex', opex, 'cx');
+    N('capex', 0, R[4] - 14, 180, 46, 'Capex', capex, 'cx'); N('opex', 0, R[4] + 42, 180, 46, 'Opex', opex, 'cx');
     E('rec', 'capex', null, 'left'); E('rec', 'opex', null, 'left');
-    N('ncf', 220, 500, 300, 60, 'Чистый денежный поток Подрядчика', ncf, 'ct2');
+    N('ncf', 220, R[5], 300, 58, 'Чистый денежный поток Подрядчика', ncf, 'ct2');
     E('rec', 'ncf', null);
-    N('tax', 600, 384, 250, 50, 'Налоги (по доле КМГК)', tax, 'st'); N('bon', 600, 444, 250, 50, 'Бонусы', bon, 'st'); N('soc', 600, 504, 250, 50, 'Соцпроекты', soc, 'st');
+    N('tax', 600, R[4] - 30, 250, 46, 'Налоги (по доле КМГК)', tax, 'st'); N('bon', 600, R[4] + 26, 250, 46, 'Бонусы', bon, 'st'); N('soc', 600, R[4] + 82, 250, 46, 'Соцпроекты', soc, 'st');
     E('rec', 'tax', null, 'right'); E('rec', 'bon', null, 'right'); E('rec', 'soc', null, 'right');
-    N('state', 890, 440, 270, 66, 'Государство', state, 'st2');
+    N('state', 900, R[4] + 10, 260, 62, 'Государство', state, 'st2');
     ['tax', 'bon', 'soc', 'pos'].forEach(x => E(x, 'state', null, x === 'pos' ? 'down' : 'right'));
     if (hasPrior) E('prior', 'state', null, 'rightdown');
     partners = S.cols.filter(c => /^на (долю )?/.test(c)).map(c => ({ c, v: V(new RegExp('^' + c.replace(/[()]/g, '\\$&') + '$')) }));
     const pw = Math.min(220, (1180 - (partners.length - 1) * 12) / partners.length), px0 = (1180 - (partners.length * pw + (partners.length - 1) * 12)) / 2;
-    partners.forEach((p, i) => { N('p' + i, px0 + i * (pw + 12), 640, pw, 64, p.c.replace(/^на (долю )?/, 'на долю '), p.v, 'pt'); E('ncf', 'p' + i, ratio(p.v, ncf), 'fan'); });
+    partners.forEach((p, i) => { N('p' + i, px0 + i * (pw + 12), R[6], pw, 58, p.c.replace(/^на (долю )?/, 'на долю '), p.v, 'pt'); E('ncf', 'p' + i, ratio(p.v, ncf), 'fan'); });
   } else {
     const inc = V(/^Общий доход/), cost = V(/^Всего расходы/), roy = V(/^Роялти$/), opx = V(/^Opex/), trn = V(/^Транспортные/), am = V(/^Амортизация/), oth = V(/^Другие расходы/);
     const pbt = V(/^Прибыль до/), cit = V(/^КПН/), np = V(/^Чистая прибыль/), plusA = V(/^\.\+Амортизация/), minusC = V(/^\.-Capex/), taxes = V(/^Налоги и роялти/), div = V(/^Дивиденты партнерам/);
-    N('inc', 450, 10, 300, 66, 'Общий доход', inc, 'rev');
-    N('cost', 40, 110, 300, 60, 'Всего расходы', cost, 'ct'); N('roy', 380, 110, 200, 60, 'Роялти', roy, 'st'); N('pbt', 640, 110, 320, 60, 'Прибыль до налогообложения', pbt, 'rev');
+    const R = [10, 124, 250, 380, 540];
+    N('inc', 450, R[0], 300, 62, 'Общий доход', inc, 'rev');
+    N('cost', 40, R[1], 300, 58, 'Всего расходы', cost, 'ct'); N('roy', 390, R[1], 190, 58, 'Роялти', roy, 'st'); N('pbt', 640, R[1], 320, 58, 'Прибыль до налогообложения', pbt, 'rev');
     E('inc', 'cost', ratio(cost, inc)); E('inc', 'roy', ratio(roy, inc)); E('inc', 'pbt', ratio(pbt, inc));
-    [['opx', 'Opex', opx], ['trn', 'Транспорт', trn], ['am', 'Амортизация', am], ['oth', 'Другие', oth]].forEach(([id, l, v], i) => { N(id, 34 + i * 150, 214, 140, 54, l, v, 'cx'); E('cost', id, ratio(v, cost), 'fan'); });
-    N('np', 640, 222, 260, 60, 'Чистая прибыль', np, 'ct2'); N('cit', 940, 222, 230, 56, 'КПН', cit, 'st');
+    [['opx', 'Opex', opx], ['trn', 'Транспорт', trn], ['am', 'Амортизация', am], ['oth', 'Другие', oth]].forEach(([id, l, v], i) => { N(id, 34 + i * 150, R[2], 140, 50, l, v, 'cx'); E('cost', id, ratio(v, cost), 'fan'); });
+    N('np', 640, R[2], 260, 58, 'Чистая прибыль', np, 'ct2'); N('cit', 940, R[2], 230, 58, 'КПН', cit, 'st');
     E('pbt', 'np', ratio(np, pbt)); E('pbt', 'cit', ratio(cit, pbt));
-    N('pa', 330, 330, 210, 50, '+ Амортизация', plusA, 'ct'); N('mc', 330, 392, 210, 50, '− Capex', minusC != null ? -Math.abs(minusC) : null, 'cx');
-    N('div', 640, 352, 260, 64, 'Дивиденды партнёрам', div, 'ct2');
+    N('pa', 330, R[3] - 12, 210, 46, '+ Амортизация', plusA, 'ct'); N('mc', 330, R[3] + 44, 210, 46, '− Capex', minusC != null ? -Math.abs(minusC) : null, 'cx');
+    N('div', 640, R[3], 260, 62, 'Дивиденды партнёрам', div, 'ct2');
     E('np', 'div', null); E('pa', 'div', null, 'right'); E('mc', 'div', null, 'right');
-    N('state', 930, 352, 240, 64, 'Государство', taxes, 'st2');
+    N('state', 940, R[3], 230, 62, 'Государство', taxes, 'st2');
     E('cit', 'state', null); E('roy', 'state', null, 'roy');
     partners = S.cols.filter(c => /^на /.test(c)).map(c => ({ c, v: V(new RegExp('^' + c.replace(/[()]/g, '\\$&') + '$')) }));
     const pw = 260;
-    partners.forEach((p, i) => { N('p' + i, 40 + i * (pw + 30), 560, pw, 64, p.c.replace(/^на (долю )?/, 'на долю '), p.v, 'pt'); E('div', 'p' + i, ratio(p.v, div), 'fan'); });
+    partners.forEach((p, i) => { N('p' + i, 40 + i * (pw + 30), R[4], pw, 58, p.c.replace(/^на (долю )?/, 'на долю '), p.v, 'pt'); E('div', 'p' + i, ratio(p.v, div), 'fan'); });
   }
   const by = Object.fromEntries(nodes.map(n => [n.id, n]));
   const H = Math.max(...nodes.map(n => n.y + n.h)) + 14;
@@ -1511,22 +1518,23 @@ function schemeSVG(k, r) {
     if (e.mode === 'left') return `M${a.x} ${a.y + a.h / 2} H${b.x + b.w + 10} V${b.y + b.h / 2} H${b.x + b.w}`;
     if (e.mode === 'right') return `M${a.x + a.w} ${a.y + a.h / 2} H${b.x - 30} V${b.y + b.h / 2} H${b.x}`;
     if (e.mode === 'side') return `M${a.x + (a.x > b.x ? 0 : a.w)} ${a.y + a.h / 2} H${b.x + b.w / 2 + (a.x > b.x ? 40 : -40)} V${b.y}`;
-    if (e.mode === 'rightdown') return `M${a.x + a.w} ${a.y + a.h / 2} H${b.x + b.w + 6} V${b.y + b.h / 2} H${b.x + b.w}`;
-    if (e.mode === 'roy') return `M${a.x + a.w} ${a.y + a.h / 2} H610 V305 H${b.x + 40} V${b.y}`;
+    if (e.mode === 'rightdown') return `M${a.x + a.w} ${a.y + a.h / 2} H${b.x + b.w + 14} V${b.y + b.h / 2} H${b.x + b.w}`;
+    if (e.mode === 'roy') return `M${a.x + a.w} ${a.y + a.h / 2} H610 V${b.y - 36} H${b.x + 40} V${b.y}`;
     if (e.mode === 'long') return `M${ax} ${ay} V${ay + 150} H${b.x + 30} V${b.y}`;
-    const my = e.mode === 'fan' ? b.y - 22 : (ay + by_) / 2;
+    const my = e.mode === 'fan' ? b.y - 26 : (ay + by_) / 2;
     return `M${ax} ${ay} V${my} H${bx} V${by_}`;
   };
   const lbl = e => { if (e.pct == null || !isFinite(e.pct)) return ''; const b = by[e.b], a = by[e.a]; if (!b || !a) return '';
-    const x = b.x + b.w / 2 + (b.x + b.w / 2 >= a.x + a.w / 2 ? 8 : -8), y = e.mode === 'fan' ? b.y - 28 : (a.y + a.h + b.y) / 2 - 6;
-    return `<text class="sc-pct" x="${x}" y="${y}" text-anchor="${b.x + b.w / 2 >= a.x + a.w / 2 ? 'start' : 'end'}">${pct(e.pct, e.mode === 'fan' || Math.abs(e.pct) < 0.05 ? 2 : 0)}</text>`; };
+    const t = pct(e.pct, e.mode === 'fan' || Math.abs(e.pct) < 0.05 ? 2 : 0), w = t.length * 7.2 + 14;
+    const x = b.x + b.w / 2, y = e.mode === 'fan' ? b.y - 26 : (a.y + a.h + b.y) / 2;
+    return `<g class="sc-pill"><rect x="${x - w / 2}" y="${y - 10}" width="${w}" height="20" rx="10"/><text x="${x}" y="${y + 4.2}" text-anchor="middle">${t}</text></g>`; };
   const ord = id => nodes.findIndex(n => n.id === id);
   edges.forEach(e => { const A = by[e.a], B = by[e.b]; e.v = A && B ? (['rec', 'state', 'div'].includes(e.b) ? A.val : B.val) : null; });
   const E2 = edges.filter(e => by[e.a] && by[e.b]);
   const svg = `<svg class="scheme fl-svg" viewBox="0 0 1180 ${H}" role="img" aria-label="Схема раздела продукции"><defs><marker id="arw${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="sc-arw"/></marker></defs>
     ${E2.map((e, i) => { const d = path(e); return d ? `<g class="fl-e sc-e" data-e="${i}" data-a="${e.a}" data-b="${e.b}"><path class="fl-hit" d="${d}"/><path class="sc-edge" pathLength="1" d="${d}" marker-end="url(#arw${k})" style="animation-delay:${200 + Math.max(ord(e.a), ord(e.b)) * 70}ms"/></g>` : ''; }).join('')}
     ${E2.map(lbl).join('')}
-    ${nodes.map((n, i) => `<g class="sc-node ${n.cls} fl-n" data-n="${n.id}" tabindex="0" role="button" aria-label="${esc(n.label)}: ${fm(n.val)} млн $" style="animation-delay:${i * 70}ms"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6"/><text class="sc-v scu${n.h < 60 ? ' sm' : ''}" x="${n.x + n.w / 2}" y="${n.y + (n.h < 60 ? 20 : n.h / 2 - 4)}">${fm(n.val)}</text><text class="sc-l" x="${n.x + n.w / 2}" y="${n.y + n.h - 9}">${esc(n.label)}${n.w >= 230 ? ', млн $' : ''}</text></g>`).join('')}
+    ${nodes.map((n, i) => `<g class="sc-node ${n.cls} fl-n" data-n="${n.id}" tabindex="0" role="button" aria-label="${esc(n.label)}: ${fm(n.val)} млн $" style="animation-delay:${i * 70}ms"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="8"/><text class="sc-v scu${n.h < 50 ? ' sm' : ''}" x="${n.x + n.w / 2}" y="${n.y + n.h / 2 - 3}">${fm(n.val)}</text><text class="sc-l" x="${n.x + n.w / 2}" y="${n.y + n.h - 8}">${esc(n.label)}${n.w >= 230 ? ', млн $' : ''}</text></g>`).join('')}
   </svg>`;
   const NOTE = { rec: 'Cost Oil + Profit Oil Подрядчика', state: 'Profit Oil Государства + налоги + бонусы + соцпроекты (+ приоритетный платёж, если есть)', ncf: 'Поступления − Capex − Opex − платежи государству', div: 'Чистая прибыль + амортизация − Capex', mc: 'Вычитается при расчёте дивидендов' };
   FLOW_DATA[k] = { nodes: nodes.map(n => ({ id: n.id, label: n.label, val: n.val, note: NOTE[n.id] || '' })), edges: E2.map(e => ({ a: e.a, b: e.b, v: e.v, pct: e.pct })) };
@@ -1692,19 +1700,19 @@ function capexOpex(k) {
   const mo = DATA.econ[k].monthly, idx = mo.months.map((m, i) => m.startsWith('2026') ? i : -1).filter(i => i >= 0);
   const M = idx.map(i => mo.months[i]);
   const ch = (key, title, color) => chartBox({ title, cats: M, series: [{ name: 'План', color: 'var(--ink-2)', kind: 'line', dash: true, values: idx.map(i => mo[key].plan[i]), unit: 'млн $' }, { name: 'Факт', color, kind: 'line', area: true, width: 2.6, values: idx.map(i => mo[key].fact[i]), unit: 'млн $' }], xFmt: c => MN[+c.slice(5) - 1], tipTitle: c => mLong(c) });
-  const ub = chartBox({ title: 'Удельные', cats: M, series: [{ name: 'План', color: 'var(--c8)', hatch: true, values: idx.map(i => mo.ubbl.plan[i]), unit: '$/барр.' }, { name: 'Факт', color: 'var(--c2)', values: idx.map(i => mo.ubbl.fact[i]), unit: '$/барр.' }], xFmt: c => MN[+c.slice(5) - 1], tipTitle: c => mLong(c) });
   return `<div class="grid2">${panel(`Капитальные затраты ${FS(k)}, 2026`, 'млн $ в месяц', ch('capex', 'Capex', 'var(--c1)'))}${panel(`Эксплуатационные расходы ${FS(k)}, 2026`, 'млн $ в месяц', ch('opex', 'Opex', 'var(--c2)'))}</div>
-    <div style="margin-top:16px">${panel('Удельные эксплуатационные расходы', '$/барр.', ub)}</div>`;
+`;
 }
 function grpTable(k) {
-  const g = DATA.econ[k].grp, fx = g.rows.some(r => r.fixed), note = g.rows.map(r => r.fixedNote).filter(Boolean);
-  const d = r => r.unit.startsWith('$') ? 2 : 1;
+  const g = DATA.econ[k].grp, rows = g.rows.filter(r => !/(баррель|тонну)/.test(r.name));
+  const fx = rows.some(r => r.fixed), d = () => 1;
+  const isMain = r => /^(Капитальные затраты|Эксплуатационные расходы|Операционные расходы)/.test(r.name);
   return `<h3 class="sub-h">Исполнение ГРПиБ, ${esc(g.period)} 2026</h3>` + table(
     [{ t: 'Статья' }, { t: 'Ед.' }, { t: 'План 2026', v: true }, { t: `План ${g.period}`, v: true }, { t: `Факт ${g.period}`, v: true }, { t: 'Откл.', v: true }, { t: 'Исполнение', v: true }, { t: 'Комментарий' }],
-    g.rows.map(r => ({ cells: [esc(r.name), esc(r.unit), r.plan == null ? null : fmtF(r.plan, d(r)), r.ytdPlan == null ? null : fmtF(r.ytdPlan, d(r)), r.ytdFact == null ? null : fmtF(r.ytdFact, d(r)),
+    rows.map(r => ({ cls: isMain(r) ? 'grp-main' : 'grp-sub', cells: [isMain(r) ? `<b>${esc(r.name)}</b>` : `<span class="grp-ind">${esc(r.name)}</span>`, esc(r.unit), r.plan == null ? null : fmtF(r.plan, d(r)), r.ytdPlan == null ? null : fmtF(r.ytdPlan, d(r)), r.ytdFact == null ? null : fmtF(r.ytdFact, d(r)),
       r.ytdFact != null && r.ytdPlan != null ? `${r.ytdFact - r.ytdPlan >= 0 ? '+' : ''}${fmtF(r.ytdFact - r.ytdPlan, d(r))}` : null,
       r.ytdPlan ? pill(r.ytdFact / r.ytdPlan, false) : null, r.note ? `<span class="txt econ-note">${esc(r.note)}</span>` : ''] })))
-    + `<p class="note">Для затрат «ниже плана» отмечено синим, «выше плана» — красным.${fx ? ' Часть значений в книге указана в тыс. $ при подписи «млн $» — приведены к млн $.' : ''}${note.length ? ' ' + esc(note.join(' ')) : ''}</p>`;
+    + `<p class="note">Для затрат «ниже плана» отмечено синим, «выше плана» — красным.${fx ? ' Часть значений в книге указана в тыс. $ при подписи «млн $» — приведены к млн $.' : ''}</p>`;
 }
 /* ---------- денежные потоки ---------- */
 function cashView(k, r) {
@@ -1730,7 +1738,7 @@ function indView(k) {
   let html = etab(e.contr, k === 'Y' ? `Основные показатели деятельности ${FS(k)}` : 'Экономические показатели Подрядчика');
   if (k === 'Y') html += `<p class="note">Единицы — как в книге: суммы в строках указаны в разных единицах (млн $ и тыс. $).</p>`;
   html += etab(e.rep, 'Экономические показатели Республики');
-  html += `<h3 class="sub-h">Лифтинговые затраты</h3>` + table([{ t: 'Статья' }, { t: 'Факт 2025', v: true }, { t: 'План 2026', v: true }, { t: 'Изменение', v: true }],
+  html += `<h3 class="sub-h">Лифтинг затраты</h3>` + table([{ t: 'Статья' }, { t: 'Факт 2025', v: true }, { t: 'План 2026', v: true }, { t: 'Изменение', v: true }],
     e.lift.map(r => ({ cells: [r[0], fmtF(r[1], 2), fmtF(r[2], 2), r[1] ? `${r[2] - r[1] >= 0 ? '+' : ''}${pct(r[2] / r[1] - 1, 0)}` : null] }))
       .concat([{ cls: 'tot', cells: ['Итого', fmtF(sum(e.lift.map(r => r[1])), 2), fmtF(sum(e.lift.map(r => r[2])), 2), null] }]));
   return html;
@@ -1741,13 +1749,13 @@ RENDER.econ = {
     const cap = grpRow(k, /^Капитальн/), opx = grpRow(k, /^(Эксплуатац|Операц)/), ub = grpRow(k, /баррель/);
     const rr = r => r && r.ytdPlan ? r.ytdFact / r.ytdPlan : null;
     const ks = [];
-    if (cap) ks.push({ l: `Капитальные затраты, факт ${g.period}`, v: fmtF(cap.ytdFact, 1), u: 'млн $', s: `план ${fmtF(cap.ytdPlan, 1)} · ${rr(cap) != null ? pct(rr(cap), 0) + ' плана' : ''}` });
-    if (opx) ks.push({ l: `Эксплуатационные расходы, факт ${g.period}`, v: fmtF(opx.ytdFact, 1), u: 'млн $', s: `план ${fmtF(opx.ytdPlan, 1)} · ${rr(opx) != null ? pct(rr(opx), 0) + ' плана' : ''}` });
-    if (ub && ub.ytdFact != null) ks.push({ l: 'Удельные экспл. расходы', v: fmtF(ub.ytdFact, 2), u: '$/барр.', s: ub.ytdPlan != null ? `план ${fmtF(ub.ytdPlan, 2)}` : '' });
-    if (cap && cap.plan != null) ks.push({ l: 'Капитальные затраты, план 2026', v: fmtF(cap.plan, 1), u: 'млн $', s: 'годовой план' });
+    if (cap) { ks.push({ l: `Капитальные затраты, план ${g.period}`, v: fmtF(cap.ytdPlan, 1), u: 'млн $', s: `план 2026 — ${fmtF(cap.plan, 1)}` });
+      ks.push({ l: `Капитальные затраты, факт ${g.period}`, v: fmtF(cap.ytdFact, 1), u: 'млн $', s: rr(cap) != null ? `${pct(rr(cap), 0)} плана` : '' }); }
+    if (opx) { ks.push({ l: `Эксплуатационные расходы, план ${g.period}`, v: fmtF(opx.ytdPlan, 1), u: 'млн $', s: `план 2026 — ${fmtF(opx.plan, 1)}` });
+      ks.push({ l: `Эксплуатационные расходы, факт ${g.period}`, v: fmtF(opx.ytdFact, 1), u: 'млн $', s: rr(opx) != null ? `${pct(rr(opx), 0)} плана` : '' }); }
     const view = sub('eView' + k, 'scheme');
     const tabs = seg('eView' + k, [{ v: 'scheme', t: 'Схема раздела продукции' }, { v: 'capex', t: 'CAPEX / OPEX' }, { v: 'cash', t: 'Денежные потоки' }, { v: 'ind', t: 'Показатели' }], view, 'econ-tabs');
-    let html = secHead(`Экономика · ${FN(k)}`, 'Раздел продукции, исполнение бюджета, денежные потоки и экономические показатели.') + kpis(ks) + `<div class="econ-nav">${tabs}</div>`;
+    let html = secHead(`Экономика · ${FN(k)}`, 'Раздел продукции, исполнение бюджета, денежные потоки и экономические показатели.') + `<div class="econ-nav">${tabs}</div>` + kpis(ks);
     if (view === 'scheme') {
       const ys = DATA.econ[k].scheme.rows.map(x => String(x.y));
       const r = yrRange('sch' + k, ys, [ys[0], '2026']);
@@ -1766,8 +1774,8 @@ RENDER.econ = {
     const ys = mainYears();
     const r = yrRange('eAll', ys, [ys[0], '2026']);
     const rows = FIELDS.map(k => { const g = DATA.econ[k].grp; return { k, g, c: grpRow(k, /^Капитальн/), o: grpRow(k, /^(Эксплуатац|Операц)/), u: grpRow(k, /баррель/) }; });
-    const tbl = table([{ t: 'Месторождение' }, { t: 'Период' }, { t: 'Capex план', v: true }, { t: 'Capex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Opex план', v: true }, { t: 'Opex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Удельные OPEX, $/барр.', v: true }],
-      rows.map(({ k, g, c, o, u }) => ({ cells: [`<button class="lnk" data-goto="${k}"><span class="dot" style="background:${FC(k)};margin-right:6px"></span>${FS(k)}</button>`, esc(g.period), c ? fmtF(c.ytdPlan, 1) : null, c ? fmtF(c.ytdFact, 1) : null, c && c.ytdPlan ? pill(c.ytdFact / c.ytdPlan, false) : null, o ? fmtF(o.ytdPlan, 1) : null, o ? fmtF(o.ytdFact, 1) : null, o && o.ytdPlan ? pill(o.ytdFact / o.ytdPlan, false) : null, u && u.ytdFact != null ? fmtF(u.ytdFact, 2) : null] })));
+    const tbl = table([{ t: 'Месторождение' }, { t: 'Период' }, { t: 'Capex план', v: true }, { t: 'Capex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Opex план', v: true }, { t: 'Opex факт', v: true }, { t: 'Исполнение', v: true }],
+      rows.map(({ k, g, c, o, u }) => ({ cells: [`<button class="lnk" data-goto="${k}"><span class="dot" style="background:${FC(k)};margin-right:6px"></span>${FS(k)}</button>`, esc(g.period), c ? fmtF(c.ytdPlan, 1) : null, c ? fmtF(c.ytdFact, 1) : null, c && c.ytdPlan ? pill(c.ytdFact / c.ytdPlan, false) : null, o ? fmtF(o.ytdPlan, 1) : null, o ? fmtF(o.ytdFact, 1) : null, o && o.ytdPlan ? pill(o.ytdFact / o.ytdPlan, false) : null] })));
     const bars = (key, color, title) => chartBox({ title, cats: FIELDS.map(FS), series: [{ name: 'План с начала года', color: 'var(--c8)', hatch: true, values: rows.map(x => x[key] ? x[key].ytdPlan : null), unit: 'млн $' }, { name: 'Факт с начала года', color, values: rows.map(x => x[key] ? x[key].ytdFact : null), unit: 'млн $' }] });
     return `<section>${secHead('Финансово-экономические показатели', 'Выплаты Республике и доля КМГ за выбранный период; лифтинг затраты и исполнение бюджета 2026 года.', r.html)}
       <div class="econ-donuts">${mainDonut(r, 2, 'млн $', 'Выплаты Республике', 'По шаблону «Главная страница экономика КНП».')}${mainDonut(r, 3, 'млн $', 'ЧДП / дивиденды, доля КМГ', 'По шаблону «Главная страница экономика КНП». Отрицательная сумма (инвестиционная фаза) показана на диаграмме как 0.')}</div>
@@ -1778,8 +1786,9 @@ RENDER.econ = {
   }
 };
 
+const pjText = t => esc(t).replace(/\s*·\s*/g, '<br>· ').replace(/^<br>/, '');
 /* ============================================================
-   Проекты: отдельная вкладка
+   Проекты v2: ключевые цифры, бюджет, сроки — визуально, текст свёрнут
    ============================================================ */
 const pjNorm = t => String(t || '').toLowerCase().replace(/[\s\-–—.()«»"]/g, '');
 function pjBudget(k, name) {
@@ -1788,35 +1797,69 @@ function pjBudget(k, name) {
   const r = e.grp.rows.find(x => !/^(Капитальн|Эксплуатац|Операц|Удельн|Прочие)/.test(x.name) && (n.includes(pjNorm(x.name)) || pjNorm(x.name).includes(n)));
   return r ? { row: r, period: e.grp.period } : null;
 }
-function pjBudgetHTML(b) {
-  if (!b) return '';
-  const r = b.row, q = r.ytdPlan ? r.ytdFact / r.ytdPlan : null;
-  return `<div class="pj-b"><span><i>План 2026</i><b>${r.plan == null ? '—' : fmtF(r.plan, 1)}</b> млн $</span><span><i>План ${esc(b.period)}</i><b>${r.ytdPlan == null ? '—' : fmtF(r.ytdPlan, 1)}</b> млн $</span><span><i>Факт ${esc(b.period)}</i><b>${r.ytdFact == null ? '—' : fmtF(r.ytdFact, 1)}</b> млн $</span>${q != null ? `<span class="pj-q">${pill(q, false)}</span>` : ''}</div>`;
+function pjFacts(p) {
+  const t = [p.desc, p.status, p.notes].filter(Boolean).join(' ').replace(/\s+/g, ' ');
+  const f = [], g = (re) => { const m = re.exec(t); return m ? m[1] : null; };
+  const gain = g(/[Пп]рирост[^~\d]{0,20}~?\s?([\d.,]+)\s*тыс\.?\s*т\.?\s*в сутки/), bbl = g(/~?([\d.,]+)\s*тыс\.?\s*барр\.?\/сутки/);
+  if (gain) f.push({ i: '▲', l: 'Прирост добычи', v: `${gain} тыс. т/сут`, s: bbl ? `≈ ${bbl} тыс. барр./сут` : '' });
+  const est = g(/(?:[Оо]ценка|[Пп]редварительная оценка|[Пп]ервоначальная оценка)[^$]{0,40}\$\s?([\d.,]+)\s*млрд/);
+  if (est) f.push({ i: '$', l: 'Оценка затрат', v: `$${est} млрд`, s: '' });
+  const npv = g(/NPV@?\s?10(?:[,.]\d+)?\s*\$?\s?([\d.,]+)\s*млрд/i); if (npv) f.push({ i: '◆', l: 'NPV@10%', v: `$${npv} млрд`, s: '' });
+  const irr = g(/IRR\s*([\d.,]+)\s*%/i); if (irr) f.push({ i: '%', l: 'IRR', v: `${irr}%`, s: '' });
+  const gas = g(/([\d.,]+)\s*млрд\.?\s*м3\s*(?:\/\s*)?(?:в\s)?год/i); if (gas) f.push({ i: '◎', l: 'Мощность по газу', v: `${gas} млрд м³/год`, s: '' });
+  const start = g(/[Вв]вод в эксплуатацию\s*(?:—|-|:)?\s*(20\d\d)/) || g(/[Вв]вод[^.]{0,30}?(20\d\d)/);
+  if (start) f.push({ i: '⏱', l: 'Ввод', v: start, s: /оценка/.test(t.slice(t.indexOf(start) - 5, t.indexOf(start) + 20)) ? 'оценка' : '' });
+  const prog = g(/[Пп]рогресс[^%]{0,70}?(\d{1,3}(?:[.,]\d+)?)\s*%/);
+  const years = [...new Set((t.match(/\b20[2-4]\d\b/g) || []).map(Number))].filter(y => y >= 2024 && y <= 2045).sort();
+  const first = (p.status || p.desc || p.notes || '').replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s/)[0];
+  return { f, prog: prog ? parseFloat(prog.replace(',', '.')) / 100 : null, years, start: start ? +start : null, summary: first.length > 200 ? first.slice(0, 198) + '…' : first };
 }
-const pjText = t => esc(t).replace(/\s*·\s*/g, '<br>· ').replace(/^<br>/, '');
+function pjBudgetViz(b) {
+  if (!b) return '';
+  const r = b.row, mx = Math.max(r.plan || 0, r.ytdPlan || 0, Math.abs(r.ytdFact || 0)) || 1, q = r.ytdPlan ? r.ytdFact / r.ytdPlan : null;
+  const bar = (l, v, c, d) => `<div class="pjb-row"><span>${l}</span><i><b style="width:${Math.max(0, (v || 0) / mx * 100)}%;background:${c};animation-delay:${d}ms"></b></i><em>${v == null ? '—' : fmtF(v, 1)}</em></div>`;
+  return `<div class="pj-viz"><div class="pjb"><span class="pj-k">Бюджет 2026, млн $</span>${bar('План 2026', r.plan, 'var(--c8)', 100)}${bar(`План ${b.period}`, r.ytdPlan, 'var(--c3)', 220)}${bar(`Факт ${b.period}`, r.ytdFact, 'var(--c1)', 340)}</div>${q != null && q >= 0 ? `<div class="pj-ring">${rings([{ label: 'исполнение', r: Math.max(0, q), text: pct(q, 0), color: 'var(--c1)' }])}</div>` : ''}</div>`;
+}
+function pjTimeline(years, start) {
+  if (!years.length) return '';
+  const y0 = Math.min(2024, ...years), y1 = Math.max(...years, 2027), W = 100 / (y1 - y0);
+  return `<div class="pj-tl"><span class="pj-k">Сроки, упомянутые в книге</span><div class="pj-tl-bar"><i class="now" style="left:${(2026.75 - y0) * W}%" title="сейчас"></i>${years.map((y, i) => `<span class="pj-tl-y${y === start ? ' st' : ''}" style="left:${(y - y0) * W}%;animation-delay:${300 + i * 90}ms">${y}</span>`).join('')}</div></div>`;
+}
 RENDER.proj = {
   field(k) {
     const P = DATA.prod[k].projects || [];
-    let html = secHead(`Проекты · ${FN(k)}`, 'Описание, текущий статус, основные моменты и риски. Бюджет 2026 года — из таблицы ГРПиБ, если проект там выделен отдельной строкой.');
-    if (!P.length) html += `<p class="note">По проекту в книге нет описаний проектов.</p>`;
-    html += `<div class="pj-list">${P.map((p, i) => { const b = pjBudget(k, p.name); return `<article class="pj-card" style="--c:${FC(k)}">
-      <header><span class="pj-n">${i + 1}</span><h3>${esc(p.name)}</h3></header>
-      ${pjBudgetHTML(b)}
-      ${p.desc ? `<div class="pj-sec"><span class="pj-k">Описание</span><p>${pjText(p.desc)}</p></div>` : ''}
-      ${p.status ? `<div class="pj-sec pj-st"><span class="pj-k">Оценка и статус</span><p>${pjText(p.status)}</p></div>` : ''}
-      ${p.notes ? `<details class="pj-sec" open><summary class="pj-k">Основные моменты и риски</summary><p>${pjText(p.notes)}</p></details>` : ''}
-      ${p.done ? `<details class="pj-sec"><summary class="pj-k">Завершённые проекты</summary><p>${pjText(p.done)}</p></details>` : ''}
-    </article>`; }).join('')}</div>`;
+    let html = secHead(`Проекты · ${FN(k)}`, 'Ключевые цифры, бюджет 2026 года и сроки. Полный текст из книги — в разделах «Подробнее».');
+    if (!P.length) html += `<p class="note">В книге нет описаний проектов.</p>`;
+    html += `<div class="pj-list">${P.map((p, i) => { const b = pjBudget(k, p.name), F = pjFacts(p);
+      return `<article class="pj2" style="--c:${FC(k)};--i:${i}">
+      <header><span class="pj-n">${i + 1}</span><div><h3>${esc(p.name)}</h3><span class="pj-f">${esc(FS(k))}</span></div>${F.prog != null ? `<div class="pj-prog" title="прогресс работ">${rings([{ label: 'прогресс', r: Math.min(1, F.prog), text: pct(F.prog, 0), color: 'var(--accent)' }])}</div>` : ''}</header>
+      ${F.f.length ? `<div class="pj-chips">${F.f.map((c, j) => `<div class="pj-chip" style="animation-delay:${200 + j * 80}ms"><span class="ic">${c.i}</span><span class="cl">${c.l}</span><b>${esc(c.v)}</b>${c.s ? `<small>${esc(c.s)}</small>` : ''}</div>`).join('')}</div>` : ''}
+      ${pjBudgetViz(b)}
+      ${pjTimeline(F.years, F.start)}
+      ${F.summary ? `<p class="pj-sum">${esc(F.summary)}</p>` : ''}
+      <div class="pj-more-wrap">
+        ${p.desc ? `<details><summary>Описание</summary><p>${pjText(p.desc)}</p></details>` : ''}
+        ${p.status ? `<details><summary>Оценка и статус</summary><p>${pjText(p.status)}</p></details>` : ''}
+        ${p.notes ? `<details><summary>Основные моменты и риски</summary><p>${pjText(p.notes)}</p></details>` : ''}
+        ${p.done ? `<details><summary>Завершённые проекты</summary><p>${pjText(p.done)}</p></details>` : ''}
+      </div></article>`; }).join('')}</div>`;
     return `<section>${html}${srcNote(`книга ${FS(k)}, лист «Проекты»; бюджет — лист «ГРПиБ таблица».`)}</section>`;
   },
   all() {
-    const tot = sum(FIELDS.map(k => (DATA.prod[k].projects || []).length));
-    let html = secHead('Проекты · все месторождения', 'Ключевые проекты расширения и развития. Нажмите на проект, чтобы открыть подробности по месторождению.');
-    html += kpis([{ l: 'Проектов всего', v: String(tot), s: 'по данным книг' }].concat(FIELDS.map(k => ({ l: FS(k), v: String((DATA.prod[k].projects || []).length), s: (DATA.prod[k].projects || []).map(p => p.name.replace(/\s*\(.*$/, '')).join(', ') || '—' }))));
+    const all = FIELDS.flatMap(k => (DATA.prod[k].projects || []).map(p => ({ k, p, b: pjBudget(k, p.name), F: pjFacts(p) })));
+    let html = secHead('Проекты · все месторождения', 'Ключевые проекты расширения и развития: цифры, бюджет и сроки. Нажмите на проект, чтобы открыть подробности.');
+    html += kpis([{ l: 'Проектов всего', v: String(all.length), s: 'по данным книг' }].concat(FIELDS.map(k => ({ l: FS(k), v: String(all.filter(x => x.k === k).length), s: all.filter(x => x.k === k).map(x => x.p.name.replace(/\s*\(.*$/, '')).join(', ') || '—' }))));
+    const wb = all.filter(x => x.b);
+    const bud = wb.length ? chartBox({ title: 'Бюджет проектов', cats: wb.map(x => x.p.name.replace(/\s*\(.*$/, '')), series: [{ name: 'План 2026', color: 'var(--c8)', hatch: true, values: wb.map(x => x.b.row.plan), unit: 'млн $' }, { name: 'План с начала года', color: 'var(--c3)', values: wb.map(x => x.b.row.ytdPlan), unit: 'млн $' }, { name: 'Факт с начала года', color: 'var(--c1)', values: wb.map(x => x.b.row.ytdFact), unit: 'млн $' }] }) : '';
+    const yrs = all.flatMap(x => x.F.years), y0 = Math.min(2024, ...yrs), y1 = Math.max(2030, ...yrs), Wd = 100 / (y1 - y0);
+    const gantt = `<div class="pj-gantt"><div class="pg-axis">${Array.from({ length: y1 - y0 + 1 }, (_, i) => y0 + i).filter((y, i) => i % 2 === 0 || (y === y1 && (y1 - y0) % 2 === 0)).map(y => `<span style="left:${(y - y0) * Wd}%">${y}</span>`).join('')}</div>${all.map((x, i) => `<button type="button" class="pg-row" data-goto="${x.k}" style="--c:${FC(x.k)};--i:${i}"><span class="pg-name"><span class="dot" style="background:${FC(x.k)}"></span>${esc(x.p.name.replace(/\s*\(.*$/, ''))}</span><span class="pg-track">${x.F.years.length ? `<i class="pg-span" style="left:${(Math.min(...x.F.years) - y0) * Wd}%;width:${Math.max(1.5, (Math.max(...x.F.years) - Math.min(...x.F.years)) * Wd)}%"></i>` : ''}${x.F.years.map(y => `<i class="pg-dot${y === x.F.start ? ' st' : ''}" style="left:${(y - y0) * Wd}%" title="${y}"></i>`).join('')}<i class="pg-now" style="left:${(2026.75 - y0) * Wd}%"></i></span></button>`).join('')}</div>`;
+    html += `<div class="grid2">${panel('Бюджет проектов 2026', 'млн $', bud || '<p class="note">Нет проектов с отдельной строкой в ГРПиБ.</p>', 'Проекты, выделенные отдельной строкой в таблице ГРПиБ.')}${panel('Сроки по проектам', 'годы, упомянутые в книгах', gantt, 'Крупная точка — ввод в эксплуатацию (по тексту книги), вертикальная линия — сегодня.')}</div>`;
     FIELDS.forEach(k => {
-      const P = DATA.prod[k].projects || []; if (!P.length) return;
-      html += `<h3 class="sub-h"><span class="dot" style="background:${FC(k)};margin-right:8px"></span>${esc(FN(k))}</h3><div class="pj-grid">${P.map(p => { const b = pjBudget(k, p.name), first = (p.desc || p.status || p.notes || '').replace(/\s+/g, ' ').trim();
-        return `<button type="button" class="pj-mini" data-goto="${k}" style="--c:${FC(k)}"><h4>${esc(p.name)}</h4>${b ? `<span class="pj-mb">Бюджет 2026: ${fmtF(b.row.plan, 1)} млн $ · факт ${esc(b.period)}: ${fmtF(b.row.ytdFact, 1)}</span>` : ''}<p>${esc(first.length > 230 ? first.slice(0, 228) + '…' : first)}</p><span class="pj-more">Подробнее →</span></button>`; }).join('')}</div>`;
+      const P = all.filter(x => x.k === k); if (!P.length) return;
+      html += `<h3 class="sub-h"><span class="dot" style="background:${FC(k)};margin-right:8px"></span>${esc(FN(k))}</h3><div class="pj-grid">${P.map((x, i) => `<button type="button" class="pj-mini" data-goto="${k}" style="--c:${FC(k)};--i:${i}"><h4>${esc(x.p.name)}</h4>
+        ${x.F.f.length ? `<span class="pj-mchips">${x.F.f.slice(0, 3).map(c => `<span><em>${c.i}</em>${esc(c.v)}</span>`).join('')}</span>` : ''}
+        ${x.b ? `<span class="pj-mbar"><i style="width:${Math.min(100, Math.max(0, x.b.row.ytdPlan ? x.b.row.ytdFact / x.b.row.ytdPlan * 100 : 0))}%"></i></span><span class="pj-mb">Бюджет 2026: ${fmtF(x.b.row.plan, 1)} млн $ · факт ${esc(x.b.period)}: ${fmtF(x.b.row.ytdFact, 1)}</span>` : ''}
+        <p>${esc(x.F.summary)}</p><span class="pj-more">Подробнее →</span></button>`).join('')}</div>`;
     });
     return `<section>${html}${srcNote('листы «Проекты» каждой книги; бюджет — «ГРПиБ таблица».')}</section>`;
   }
@@ -2010,8 +2053,8 @@ async function exportPPTX(secs) {
     }
     if (t === 'econ') {
       const sl = tSlide('Экономика: исполнение ГРПиБ с начала года', 'млн $');
-      tbl(sl, ['Месторождение', 'Период', 'Capex план', 'Capex факт', 'Исполн.', 'Opex план', 'Opex факт', 'Исполн.', 'Удельные OPEX, $/барр.'],
-        FIELDS.map((k, i) => { const g = DATA.econ[k].grp, c = grpRow(k, /^Капитальн/), o = grpRow(k, /^(Эксплуатац|Операц)/), u = grpRow(k, /баррель/); return [names[i], g.period, c ? fmt(c.ytdPlan, 1) : '—', c ? fmt(c.ytdFact, 1) : '—', c && c.ytdPlan ? P(c.ytdFact / c.ytdPlan) : '—', o ? fmt(o.ytdPlan, 1) : '—', o ? fmt(o.ytdFact, 1) : '—', o && o.ytdPlan ? P(o.ytdFact / o.ytdPlan) : '—', u && u.ytdFact != null ? fmtF(u.ytdFact, 2) : '—']; }), { colW: [3.33, 1.0, 1.2, 1.2, 1.0, 1.2, 1.2, 1.0, 1.2], fs: 11 });
+      tbl(sl, ['Месторождение', 'Период', 'Capex план', 'Capex факт', 'Исполн.', 'Opex план', 'Opex факт', 'Исполн.'],
+        FIELDS.map((k, i) => { const g = DATA.econ[k].grp, c = grpRow(k, /^Капитальн/), o = grpRow(k, /^(Эксплуатац|Операц)/), u = grpRow(k, /баррель/); return [names[i], g.period, c ? fmt(c.ytdPlan, 1) : '—', c ? fmt(c.ytdFact, 1) : '—', c && c.ytdPlan ? P(c.ytdFact / c.ytdPlan) : '—', o ? fmt(o.ytdPlan, 1) : '—', o ? fmt(o.ytdFact, 1) : '—', o && o.ytdPlan ? P(o.ytdFact / o.ytdPlan) : '—']; }), { colW: [3.53, 1.1, 1.3, 1.3, 1.2, 1.3, 1.3, 1.3], fs: 11 });
       const s2 = tSlide('Денежные потоки Республики по годам', 'млн $, факт по 2025 год');
       const yrs = [...new Set(FIELDS.flatMap(k => DATA.econ[k].cash.rows.map(r => r.y)))].filter(y => y >= 2010 && y <= 2025).sort();
       s2.addChart(pptx.ChartType.bar, FIELDS.map((k, i) => { const C = DATA.econ[k].cash, j = C.cols.findIndex(c => /Республики/.test(c)); return { name: short[i], labels: yrs.map(String), values: yrs.map(y => { const r = C.rows.find(x => x.y === y); return r && j >= 0 ? (r.v[j] || 0) : 0; }) }; }),
