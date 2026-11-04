@@ -67,6 +67,22 @@ function nice(min, max, count = 5) {
   const t = []; for (let v = lo; v <= hi + step / 2; v += step) t.push(+v.toFixed(10));
   return { lo, hi, t, step };
 }
+const _lblCtx = document.createElement('canvas').getContext('2d'), _lblCache = {}, _lumCache = {};
+function isDark(color) {   // тёмная заливка → белая подпись
+  const key = color + '|' + (document.documentElement.dataset.theme || '');
+  if (key in _lumCache) return _lumCache[key];
+  let c = color; const m = /var\((--[\w-]+)\)/.exec(c); if (m) c = getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim();
+  _lblCtx.fillStyle = '#000'; _lblCtx.fillStyle = c; const h = _lblCtx.fillStyle;
+  let r = 0, g = 0, b = 0;
+  if (/^#[0-9a-f]{6}$/i.test(h)) { r = parseInt(h.slice(1, 3), 16); g = parseInt(h.slice(3, 5), 16); b = parseInt(h.slice(5, 7), 16); }
+  else { const q = h.match(/\d+/g) || [0, 0, 0]; [r, g, b] = q.map(Number); }
+  return (_lumCache[key] = (0.299 * r + 0.587 * g + 0.114 * b) < 140);
+}
+function measureLbl(t, fs) {
+  const k = fs + '|' + t; if (_lblCache[k]) return _lblCache[k];
+  _lblCtx.font = `800 ${fs}px ${getComputedStyle(document.body).fontFamily}`;
+  return (_lblCache[k] = _lblCtx.measureText(t).width);
+}
 function drawChart(el, spec) {
   const W = Math.max(260, el.clientWidth);
   const A = el.dataset.anim === '1'; delete el.dataset.anim; el.classList.toggle('fx', A);
@@ -89,6 +105,8 @@ function drawChart(el, spec) {
   for (const s of series) if (s.kind === 'line' && s.axis !== 'right') for (const v of s.values) if (v != null) { lmax = Math.max(lmax, v); lmin = Math.min(lmin, v); }
   if (!isFinite(lmax)) { lmax = 1; lmin = 0; }
   const zero = spec.zero !== false || bars.length;
+  const LBL = spec.labels !== false;
+  if (LBL && bars.length) { if (lmax > 0) lmax *= 1.1; if (lmin < 0) lmin *= 1.1; }
   if (zero) { lmin = Math.min(0, lmin); lmax = Math.max(0, lmax); }
   else { const pad = (lmax - lmin) * 0.08 || Math.abs(lmax) * 0.05 || 1; lmin -= pad; lmax += pad; }
   if (spec.yMin != null) lmin = spec.yMin; if (spec.yMax != null) lmax = Math.max(spec.yMax, spec.yMaxSoft ? lmax : spec.yMax);
@@ -104,7 +122,7 @@ function drawChart(el, spec) {
   // ---- margins
   const lw = Math.max(...L.t.map(v => String(yf(v)).length)) * 6.6 + 10;
   const rw = R ? Math.max(...R.t.map(v => String(rf(v)).length)) * 6.6 + 12 : 8;
-  const m = { l: Math.max(30, lw), r: Math.max(8, rw), t: 10, b: 24 };
+  const m = { l: Math.max(30, lw), r: Math.max(8, rw), t: LBL ? 16 : 10, b: 24 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const band = iw / n;
   const y = v => m.t + ih - (v - L.lo) / (L.hi - L.lo) * ih;
@@ -136,9 +154,11 @@ function drawChart(el, spec) {
   const gw = band * (spec.barWidth || (stacks.length > 1 ? 0.8 : 0.66));
   const sw = gw / Math.max(1, stacks.length);
   const y0 = y(Math.max(L.lo, Math.min(L.hi, 0))), dly = Math.min(45, 650 / n);
+  const LB = [];                       // кандидаты подписей: {x, y, t, pr, cls, anchor}
+  const lf = (v, s) => (s && s.lFmt) ? s.lFmt(v) : spec.lFmt ? spec.lFmt(v) : spec.yFmt && !spec.lRaw ? spec.yFmt(v) : (Math.abs(v) >= 100 ? fmtF(v, 0) : Math.abs(v) >= 10 ? fmtF(v, 1) : fmtF(v, Math.abs(v) < 1 && v !== 0 ? 2 : 1)) + (s && s.unit === '%' ? '%' : '');
   for (let i = 0; i < n; i++) {
     stacks.forEach((st, si) => {
-      let pos = 0, neg = 0;
+      let pos = 0, neg = 0, nSeg = 0, tot = 0, lastY = null, lastNeg = false;
       const x0 = m.l + band * i + (band - gw) / 2 + sw * si;
       const pad = stacks.length > 1 ? Math.min(2, sw * 0.12) : 0;
       for (const s of bars) {
@@ -151,6 +171,16 @@ function drawChart(el, spec) {
         const fill = s.hatch ? `url(#${pats[s.color]})` : s.color;
         const style = s.hatch ? `fill:${fill};stroke:${s.color};stroke-width:1` : `fill:${fill}`;
         svg += `<rect x="${x0 + pad / 2}" y="${y1}" width="${Math.max(1, sw - pad)}" height="${h}" rx="${Math.min(2, sw / 4)}" style="${style}${A ? `;transform-origin:0 ${y0}px;animation-delay:${Math.round(i * dly + si * 35)}ms` : ''}" class="fx-bar"${s.opacity ? ` opacity="${s.opacity}"` : ''}/>`;
+        nSeg++; tot += v;
+        if (LBL && !s.noLabel) LB.push({ dark: !s.hatch && isDark(s.color), seg: true, x: x0 + sw / 2, y: (y1 + y2) / 2 + 3.5, h, w: sw - pad, t: lf(v, s), pr: 2, cls: s.hatch ? 'dl dl-in dl-p' : 'dl dl-in', stack: st, i });
+        lastY = v >= 0 ? y(pos) : y(neg); lastNeg = v < 0;
+      }
+      if (LBL && nSeg) {
+        const multi = nSeg > 1, sOne = bars.find(s => (s.stack || s.name) === st);
+        // одиночный столбец — подпись над ним; стопка — подписи сегментов внутри и итог над стопкой
+        const top = lastY, hgt = lastNeg ? 0 : y0 - lastY, dk = !!(sOne && !sOne.hatch && isDark(sOne.color));
+        if (!multi) { const k = LB.length - 1; LB[k] = { dark: dk, x: x0 + sw / 2, y: lastNeg ? lastY + 12 : lastY - 4, t: LB[k].t, pr: 1, cls: sOne && sOne.hatch ? 'dl dl-p' : 'dl', w: sw, top, hgt }; }
+        else LB.push({ x: x0 + sw / 2, y: lastNeg ? lastY + 12 : lastY - 4, t: lf(tot, sOne), pr: 0, cls: 'dl dl-tot', w: sw, top, hgt });
       }
     });
   }
@@ -168,7 +198,39 @@ function drawChart(el, spec) {
     const showDots = s.dots != null ? s.dots : n <= 30;
     if (showDots || pts.length === 1) pts.forEach(p => { svg += `<circle cx="${p[0]}" cy="${p[1]}" r="${n <= 14 ? 3.2 : 2.4}" class="fx-dot" style="fill:var(--surface);stroke:${s.color};stroke-width:1.8${A ? `;animation-delay:${Math.round(150 + (p[0] - m.l) / iw * 1100)}ms` : ''}"/>`; });
     if (!s.dash && pts.length > 2 && lineN <= 4) { const p = pts[pts.length - 1]; svg += `<circle class="fx-pulse" cx="${p[0]}" cy="${p[1]}" r="5" style="fill:none;stroke:${s.color};stroke-width:2"/>`; }
+    if (LBL && !s.noLabel) {
+      const idx = s.values.map((v, i) => v == null ? -1 : i).filter(i => i >= 0); if (!idx.length) return;
+      const vals = idx.map(i => s.values[i]), imax = idx[vals.indexOf(Math.max(...vals))], imin = idx[vals.indexOf(Math.min(...vals))], ilast = idx[idx.length - 1];
+      const key = new Set([ilast, imax, imin]);
+      idx.forEach(i => { if (s.dash && n > 12 && !key.has(i)) return; const v = s.values[i], yy = Y(v); const pr = key.has(i) ? (s.dash ? 4 : 3) : (s.dash ? 6 : 5);
+        LB.push({ x: cx(i), y: yy - 7, alt: yy + 15, t: lf(v, s), pr, cls: 'dl dl-ln', col: s.color, line: true }); });
+    }
   });
+  // ---- размещение подписей без наложений: по приоритету, в границах графика
+  if (LBL && LB.length) {
+    const placed = [], fs = narrow ? 9.5 : 10.5;
+    const tw = t => measureLbl(t, fs) + 6;
+    const box = (x, yb, t) => { const w = tw(t); return { x1: x - w / 2, x2: x + w / 2, y1: yb - fs, y2: yb + 3 }; };
+    const hit = b => placed.some(p => b.x1 < p.x2 && b.x2 > p.x1 && b.y1 < p.y2 && b.y2 > p.y1);
+    const inside = b => b.x1 >= m.l - 2 && b.x2 <= W - m.r + 2 && b.y1 >= 1 && b.y2 <= m.t + ih + 1;
+    LB.sort((a, b) => a.pr - b.pr).forEach(l => {
+      const w = tw(l.t);
+      if (l.seg) { if (l.h < fs + 3 || w > l.w - 2) return; }
+      else if (!l.line && w > Math.max(l.w * 1.3, l.w + 8)) {
+        // не помещается по ширине — пробуем вертикально внутри столбца
+        if (!(l.hgt >= w + 4 && l.w >= fs - 1)) return;
+        const vb = { x1: l.x - fs / 2 - 1, x2: l.x + fs / 2 + 1, y1: l.top + 3, y2: l.top + 3 + w };
+        if (hit(vb)) return; placed.push(vb);
+        svg += `<text class="${l.cls} dl-v${l.dark && l.pr !== 0 ? ' dl-w' : ''}${A ? ' fx-fade' : ''}" transform="translate(${(l.x + fs / 2 - 1.5).toFixed(1)} ${(l.top + 4).toFixed(1)}) rotate(-90)" text-anchor="end">${esc(l.t)}</text>`;
+        return;
+      }
+      let b = box(l.x, l.y, l.t), yy = l.y;
+      if (l.line && (!inside(b) || hit(b)) && l.alt) { const b2 = box(l.x, l.alt, l.t); if (inside(b2) && !hit(b2)) { b = b2; yy = l.alt; } }
+      if (!inside(b) || hit(b)) return;
+      placed.push(b);
+      svg += `<text class="${l.cls}${l.seg && l.dark ? ' dl-w' : ''}${A ? ' fx-fade' : ''}" x="${l.x}" y="${yy}" text-anchor="middle"${l.col ? ` style="fill:${l.col}"` : ''}>${esc(l.t)}</text>`;
+    });
+  }
   // x labels
   const xl = cats.map((c, i) => spec.xFmt ? spec.xFmt(c, i) : String(c));
   const maxLen = Math.max(...xl.map(s => (s || '').length), 1);
@@ -525,6 +587,7 @@ RENDER.prod = {
       zero: false, refs: [{ v: 100, label: '100%' }], xFmt: c => MN[+c.slice(5) - 1], tipTitle: c => mLong(c), yFmt: v => fmt(v) + '%', tipFmt: v => fmtF(v, 1) + '%'
     });
     return `<section>${secHead('Добыча · все месторождения', 'Нефть: факт с начала 2026 года против плана, многолетняя динамика и выполнение плана по месяцам.')}${ks}<div class="ops">${cards}</div>
+    ${prodDonuts()}
     <div class="grid2">${panel('Выполнение плана по нефти, 2026', 'факт / план, %', exec, lowPlanNote())}
     ${panel('Добыча по годам', aKey === 'oil' ? 'млн т' : 'млрд м³', annChart, 'D: 2000–2025; X: 2016–2025; Y: 2006–2025; Z: нефть (стабильная) с 2012, газ с 1998.', seg('prodAnnAll', [{ v: 'oil', t: 'Нефть' }, { v: 'gas', t: 'Газ' }], aKey))}</div>
     ${EXTRA.prodAll()}${srcNote('листы «Добыча» каждой книги.')}</section>`;
@@ -1336,6 +1399,56 @@ function liftChart() {
     series: parts.map((p, i) => ({ name: p, color: pal[i], values: FIELDS.map(k => (DATA.econ[k].lift.find(r => r[0] === p) || [])[j] ?? null), unit: '$/барр.', stack: 'l' })) }),
     `${yr === '2025' ? 'Факт 2025 года' : 'План на 2026 год'}. Единицы в книгах не указаны, по смыслу — $/барр.`, seg('liftY', [{ v: '2025', t: '2025' }, { v: '2026', t: '2026' }], yr));
 }
+/* --- сводные кольца по шаблону «Главная страница экономика КНП» --- */
+const mainYears = () => [...new Set(FIELDS.flatMap(k => Object.keys((DATA.econMain || { rows: {} }).rows[k] || {})))].sort();
+function mainVal(k, y, i) {
+  if (y === '2026' && i < 2) { const mm = DATA.prod[k].mon[i ? 'agas' : 'oil']; return mm ? sum(mm.fact.slice(12).map(x => x || 0)) : null; }
+  const row = ((DATA.econMain || { rows: {} }).rows[k] || {})[y]; return row ? row[i] : null;
+}
+const mainSum = (k, r, i) => sum(mainYears().filter(y => +y >= r.from && +y <= r.to).map(y => mainVal(k, y, i) || 0));
+function mainDonut(r, i, unit, title, note) {
+  const vals = FIELDS.map(k => mainSum(k, r, i));
+  return panel(title, unit, donut(FIELDS.map((k, n) => ({ label: FS(k), v: Math.max(0, vals[n]), color: FC(k), text: `${fm(vals[n])} ${unit}` })), { v: fm(sum(vals)), l: unit }), note);
+}
+function prodDonuts() {
+  const ys = mainYears(), r = yrRange('pMain', ys, [ys[0], '2026']);
+  const n26 = MONTHS26.filter(m => m <= DATA.prod.D.last).length;
+  const note = `${r.from}–${Math.min(r.to, 2025)} — по шаблону «Главная страница экономика КНП»; 2026 год — факт за ${n26} мес. из помесячных данных.`;
+  return `<h3 class="sub-h">Накопленная добыча</h3><div class="econ-range">${r.html}</div><div class="econ-donuts">${mainDonut(r, 0, 'тыс. т', 'Добыча нефти', note)}${mainDonut(r, 1, 'млн м³', 'Добыча газа', note)}</div>`;
+}
+
+/* --- Free cash flow и цена безубыточности (шаблон «Главная страница экономика КНП») --- */
+function fcfBlock() {
+  const F = (DATA.econMain || {}).fcf || []; if (!F.length) return { chart: '', table: '' };
+  const rows = FIELDS.flatMap(k => F.filter(x => x.k === k).sort((a, b) => a.y - b.y).map((x, i, arr) => ({ cls: i === arr.length - 1 ? 'grp-end' : '', cells: [i === 0 ? `<span class="dot" style="background:${FC(k)};margin-right:6px"></span><b>${FS(k)}</b>` : '', `${x.y}${x.y === 2026 ? '*' : ''}`, x.fcf == null ? null : fmtF(x.fcf, 0), x.beNP == null ? null : fmtF(x.beNP, 0), x.beCF == null ? null : fmtF(x.beCF, 0)] })));
+  const ys = [...new Set(F.map(x => x.y))].sort();
+  const ch = chartBox({ title: 'Free cash flow', cats: FIELDS.map(FS), series: ys.map((y, i) => ({ name: y === 2026 ? `${y} (план)` : String(y), color: ['var(--c8)', 'var(--c3)', 'var(--c1)'][i] || 'var(--c2)', hatch: y === 2026, values: FIELDS.map(k => (F.find(x => x.k === k && x.y === y) || {}).fcf ?? null), unit: 'млн $' })) });
+  return { chart: panel('Free cash flow по годам', 'млн $', ch, '2026 год — плановые показатели.'), table: panel('Free cash flow и цена безубыточности', '', table([{ t: 'Оператор' }, { t: 'Год' }, { t: 'Free CF, млн $', v: true }, { t: 'Breakeven по P&L, $/bbl', v: true }, { t: 'Breakeven по CF, $/bbl', v: true }], rows), '*2026 год — плановые показатели. Источник — шаблон «Главная страница экономика КНП».') };
+}
+
+/* --- лифтинг затраты: столбцы с подписями сегментов и итогом --- */
+function liftBars() {
+  const yr = sub('liftY', '2026'), j = yr === '2025' ? 1 : 2;
+  const parts = [['Персонал', 'var(--c6)'], ['Ремонт', 'var(--c3)'], ['Прочие', 'var(--c1)']];
+  const D_ = FIELDS.map(k => parts.map(([p]) => (DATA.econ[k].lift.find(x => x[0] === p) || [])[j] || 0));
+  const tot = D_.map(a => sum(a)), max = Math.max(...tot) * 1.28 || 1;
+  const W = 560, H = 290, L = 34, B = 34, T = 20, bw = 74, gap = (W - L - FIELDS.length * bw) / (FIELDS.length + 1);
+  const y = v => H - B - v / max * (H - B - T);
+  const ticks = [0, 2, 4, 6, 8, 10, 12].filter(v => v <= max);
+  let g = ticks.map(v => `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" class="lb-grid"/><text class="lb-ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('');
+  FIELDS.forEach((k, i) => {
+    const x = L + gap + i * (bw + gap); let acc = 0;
+    const segs = parts.map(([p, c], n) => { const v = D_[i][n], y1 = y(acc + v), h = y(acc) - y1; acc += v;
+      return `<rect x="${x}" y="${y1}" width="${bw}" height="${Math.max(0, h)}" style="fill:${c}"/>${h > 16 ? `<g class="lb-lab"><rect x="${x + bw / 2 - 17}" y="${y1 + h / 2 - 9}" width="34" height="18" rx="4"/><text x="${x + bw / 2}" y="${y1 + h / 2 + 4}" text-anchor="middle">${fmtF(v, 1)}</text></g>` : ''}`; }).join('');
+    g += `<g class="lb-bar" style="animation-delay:${150 + i * 120}ms"><title>${esc(FS(k))}: ${parts.map(([p], n) => `${p} ${fmtF(D_[i][n], 2)}`).join(', ')}; итого ${fmtF(tot[i], 2)} $/барр.</title>${segs}</g>
+      <text class="lb-tl" x="${x + bw / 2}" y="${y(tot[i]) - 22}" text-anchor="middle">итого</text><text class="lb-tot" x="${x + bw / 2}" y="${y(tot[i]) - 7}" text-anchor="middle">${fmtF(tot[i], 2)}</text>
+      <text class="lb-x" x="${x + bw / 2}" y="${H - B + 18}" text-anchor="middle">${esc(FS(k))}</text>`;
+  });
+  const leg = parts.map(([p, c]) => `<span><i style="background:${c}"></i>${p}</span>`).join('') + `<span class="lb-sum">Итого лифтинг — над столбцом</span>`;
+  return panel('Лифтинг затраты', '$/барр.', `<div class="lb-leg">${leg}</div><svg class="lb-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Лифтинг затраты">${g}</svg>`,
+    `${yr === '2025' ? 'Факт 2025 года' : 'План на 2026 год'}. Над столбцом — итого лифтинг затрат. Единицы в книгах не указаны, по смыслу — $/барр.`, seg('liftY', [{ v: '2025', t: '2025' }, { v: '2026', t: '2026' }], yr));
+}
+
 /* ---------- схема раздела продукции (SVG, анимированная) ---------- */
 function schemeSVG(k, r) {
   const S = DATA.econ[k].scheme, inR = y => y >= r.from && y <= r.to;
@@ -1354,9 +1467,9 @@ function schemeSVG(k, r) {
     N('gross', 450, 10, 300, 66, 'Валовая выручка', gross, 'rev');
     if (hasPrior) { N('prior', 870, 92, 280, 60, 'Приоритетный платёж', prior, 'st'); N('net', 300, 100, 300, 60, 'Чистая выручка', net, 'rev'); E('gross', 'net', ratio(net, gross)); E('gross', 'prior', ratio(prior, gross)); }
     const top = hasPrior ? 'net' : 'gross', base = hasPrior ? net : gross;
-    N('cost', 40, 190, 290, 60, 'Cost Oil', cost, 'ct'); N('profit', 520, 190, 290, 60, 'Profit Oil', prof, 'rev');
+    N('cost', 220, 190, 300, 60, 'Cost Oil', cost, 'ct'); N('profit', 600, 190, 290, 60, 'Profit Oil', prof, 'rev');
     E(top, 'cost', ratio(cost, base)); E(top, 'profit', ratio(prof, base));
-    N('poc', 330, 280, 300, 60, 'Profit Oil Подрядчика', poc, 'ct'); N('pos', 860, 280, 300, 60, 'Profit Oil Государства', pos, 'st');
+    N('poc', 560, 280, 300, 60, 'Profit Oil Подрядчика', poc, 'ct'); N('pos', 890, 280, 270, 60, 'Profit Oil Государства', pos, 'st');
     E('profit', 'poc', ratio(poc, prof)); E('profit', 'pos', ratio(pos, prof));
     N('rec', 220, 400, 300, 66, 'Поступления Подрядчика', rec, 'ct2');
     E('cost', 'rec', null); E('poc', 'rec', null, 'side');
@@ -1408,12 +1521,17 @@ function schemeSVG(k, r) {
     const x = b.x + b.w / 2 + (b.x + b.w / 2 >= a.x + a.w / 2 ? 8 : -8), y = e.mode === 'fan' ? b.y - 28 : (a.y + a.h + b.y) / 2 - 6;
     return `<text class="sc-pct" x="${x}" y="${y}" text-anchor="${b.x + b.w / 2 >= a.x + a.w / 2 ? 'start' : 'end'}">${pct(e.pct, e.mode === 'fan' || Math.abs(e.pct) < 0.05 ? 2 : 0)}</text>`; };
   const ord = id => nodes.findIndex(n => n.id === id);
-  const svg = `<svg class="scheme" viewBox="0 0 1180 ${H}" role="img" aria-label="Схема раздела продукции"><defs><marker id="arw${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="sc-arw"/></marker></defs>
-    ${edges.map((e, i) => { const d = path(e); return d ? `<path class="sc-edge" pathLength="1" d="${d}" marker-end="url(#arw${k})" style="animation-delay:${200 + Math.max(ord(e.a), ord(e.b)) * 70}ms"/>` : ''; }).join('')}
-    ${edges.map(lbl).join('')}
-    ${nodes.map((n, i) => `<g class="sc-node ${n.cls}" style="animation-delay:${i * 70}ms" tabindex="0"><title>${esc(n.label)}: ${fm(n.val)} млн $</title><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="8"/><text class="sc-v scu${n.h < 60 ? ' sm' : ''}" x="${n.x + n.w / 2}" y="${n.y + (n.h < 60 ? 20 : n.h / 2 - 4)}">${fm(n.val)}</text><text class="sc-l" x="${n.x + n.w / 2}" y="${n.y + n.h - 9}">${esc(n.label)}${n.w >= 230 ? ', млн $' : ''}</text></g>`).join('')}
+  edges.forEach(e => { const A = by[e.a], B = by[e.b]; e.v = A && B ? (['rec', 'state', 'div'].includes(e.b) ? A.val : B.val) : null; });
+  const E2 = edges.filter(e => by[e.a] && by[e.b]);
+  const svg = `<svg class="scheme fl-svg" viewBox="0 0 1180 ${H}" role="img" aria-label="Схема раздела продукции"><defs><marker id="arw${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="sc-arw"/></marker></defs>
+    ${E2.map((e, i) => { const d = path(e); return d ? `<g class="fl-e sc-e" data-e="${i}" data-a="${e.a}" data-b="${e.b}"><path class="fl-hit" d="${d}"/><path class="sc-edge" pathLength="1" d="${d}" marker-end="url(#arw${k})" style="animation-delay:${200 + Math.max(ord(e.a), ord(e.b)) * 70}ms"/></g>` : ''; }).join('')}
+    ${E2.map(lbl).join('')}
+    ${nodes.map((n, i) => `<g class="sc-node ${n.cls} fl-n" data-n="${n.id}" tabindex="0" role="button" aria-label="${esc(n.label)}: ${fm(n.val)} млн $" style="animation-delay:${i * 70}ms"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6"/><text class="sc-v scu${n.h < 60 ? ' sm' : ''}" x="${n.x + n.w / 2}" y="${n.y + (n.h < 60 ? 20 : n.h / 2 - 4)}">${fm(n.val)}</text><text class="sc-l" x="${n.x + n.w / 2}" y="${n.y + n.h - 9}">${esc(n.label)}${n.w >= 230 ? ', млн $' : ''}</text></g>`).join('')}
   </svg>`;
-  return `<div class="scheme-wrap">${svg}</div>`;
+  const NOTE = { rec: 'Cost Oil + Profit Oil Подрядчика', state: 'Profit Oil Государства + налоги + бонусы + соцпроекты (+ приоритетный платёж, если есть)', ncf: 'Поступления − Capex − Opex − платежи государству', div: 'Чистая прибыль + амортизация − Capex', mc: 'Вычитается при расчёте дивидендов' };
+  FLOW_DATA[k] = { nodes: nodes.map(n => ({ id: n.id, label: n.label, val: n.val, note: NOTE[n.id] || '' })), edges: E2.map(e => ({ a: e.a, b: e.b, v: e.v, pct: e.pct })) };
+  return `<div class="flow sc-flow" data-k="${k}"><div class="fl-tools"><span></span><div><button type="button" class="fl-btn" data-fl="reset">Сбросить выделение</button><button type="button" class="fl-btn" data-fl="full">Во весь экран</button></div></div>
+    <div class="fl-scroll sc-scroll">${svg}</div><div class="tip fl-tip"></div><div class="fl-detail" hidden></div></div>`;
 }
 /* ============================================================
    Схема раздела продукции v3: поточная диаграмма по этапам (Sankey-стиль)
@@ -1634,7 +1752,7 @@ RENDER.econ = {
       const ys = DATA.econ[k].scheme.rows.map(x => String(x.y));
       const r = yrRange('sch' + k, ys, [ys[0], '2026']);
       const tabsF = `<div class="fl-assets" role="tablist" aria-label="Проект">${FIELDS.map(f => `<button type="button" role="tab" aria-selected="${f === k}" class="${f === k ? 'on' : ''}" data-goto="${f}">${FS(f)}</button>`).join('')}</div>`;
-      html += widePanel(panel(k === 'Y' ? `Распределение доходов ${FS(k)}` : `Схема раздела продукции ${FS(k)}`, `сумма за ${r.from}–${r.to} · данные на ${MNF[+DATA.prod.D.last.slice(5) - 1]} ${DATA.prod.D.last.slice(0, 4)}, млн $`, tabsF + flowView(k, { from: r.from, to: r.to }), 'Толщина потока пропорциональна сумме, проценты — доля от источника. Наведите на блок или поток, нажмите на блок — откроется расшифровка. 2026 год — план / оценка из книги.', r.html));
+      html += widePanel(panel(k === 'Y' ? `Распределение доходов ${FS(k)}` : `Схема раздела продукции ${FS(k)}`, `сумма за ${r.from}–${r.to} · данные на ${MNF[+DATA.prod.D.last.slice(5) - 1]} ${DATA.prod.D.last.slice(0, 4)}, млн $`, tabsF + schemeSVG(k, { from: r.from, to: r.to }), 'Проценты на стрелках — доля от вышестоящего показателя. Наведите на блок — подсветятся его связи, нажмите — откроется расшифровка. 2026 год — план / оценка из книги.', r.html));
     } else if (view === 'capex') {
       html += capexOpex(k) + grpTable(k);
     } else if (view === 'cash') {
@@ -1645,16 +1763,17 @@ RENDER.econ = {
     return `<section>${html}${srcNote(`${ECON_SRC[k]}, листы «Схема РП», «ГРПиБ», «Денежный поток», экономические показатели, «Лифтинг затраты».`)}</section>`;
   },
   all() {
-    const ys = [...new Set(FIELDS.flatMap(k => Object.keys(DATA.prod[k].annual.oil).concat(DATA.econ[k].cash.rows.map(x => String(x.y)), DATA.econ[k].scheme.rows.map(x => String(x.y)))).concat(['2026']))].filter(y => y <= '2026').sort();
+    const ys = mainYears();
     const r = yrRange('eAll', ys, [ys[0], '2026']);
     const rows = FIELDS.map(k => { const g = DATA.econ[k].grp; return { k, g, c: grpRow(k, /^Капитальн/), o: grpRow(k, /^(Эксплуатац|Операц)/), u: grpRow(k, /баррель/) }; });
-    const tbl = table([{ t: 'Месторождение' }, { t: 'Период' }, { t: 'Capex план', v: true }, { t: 'Capex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Opex план', v: true }, { t: 'Opex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Удельные, $/барр.', v: true }],
+    const tbl = table([{ t: 'Месторождение' }, { t: 'Период' }, { t: 'Capex план', v: true }, { t: 'Capex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Opex план', v: true }, { t: 'Opex факт', v: true }, { t: 'Исполнение', v: true }, { t: 'Удельные OPEX, $/барр.', v: true }],
       rows.map(({ k, g, c, o, u }) => ({ cells: [`<button class="lnk" data-goto="${k}"><span class="dot" style="background:${FC(k)};margin-right:6px"></span>${FS(k)}</button>`, esc(g.period), c ? fmtF(c.ytdPlan, 1) : null, c ? fmtF(c.ytdFact, 1) : null, c && c.ytdPlan ? pill(c.ytdFact / c.ytdPlan, false) : null, o ? fmtF(o.ytdPlan, 1) : null, o ? fmtF(o.ytdFact, 1) : null, o && o.ytdPlan ? pill(o.ytdFact / o.ytdPlan, false) : null, u && u.ytdFact != null ? fmtF(u.ytdFact, 2) : null] })));
     const bars = (key, color, title) => chartBox({ title, cats: FIELDS.map(FS), series: [{ name: 'План с начала года', color: 'var(--c8)', hatch: true, values: rows.map(x => x[key] ? x[key].ytdPlan : null), unit: 'млн $' }, { name: 'Факт с начала года', color, values: rows.map(x => x[key] ? x[key].ytdFact : null), unit: 'млн $' }] });
-    return `<section>${secHead('Финансово-экономические показатели', 'Добыча, выплаты Республике и доля КМГ за выбранный период; исполнение бюджета 2026 года.', r.html)}
-      ${econOverview(r)}
-      <div class="grid2">${liftChart()}${panel('Капитальные затраты с начала года', 'млн $', bars('c', 'var(--c1)', 'Capex'))}</div>
-      <div class="grid2">${panel('Эксплуатационные расходы с начала года', 'млн $', bars('o', 'var(--c2)', 'Opex'))}${panel('Исполнение ГРПиБ 2026', '', tbl, 'Периоды в книгах разные — они указаны в таблице.')}</div>
+    return `<section>${secHead('Финансово-экономические показатели', 'Выплаты Республике и доля КМГ за выбранный период; лифтинг затраты и исполнение бюджета 2026 года.', r.html)}
+      <div class="econ-donuts">${mainDonut(r, 2, 'млн $', 'Выплаты Республике', 'По шаблону «Главная страница экономика КНП».')}${mainDonut(r, 3, 'млн $', 'ЧДП / дивиденды, доля КМГ', 'По шаблону «Главная страница экономика КНП». Отрицательная сумма (инвестиционная фаза) показана на диаграмме как 0.')}</div>
+      ${(() => { const f = fcfBlock(); return `<div class="grid2">${f.chart}${liftBars()}</div>${f.table}`; })()}
+      <div class="grid2">${panel('Капитальные затраты с начала года', 'млн $', bars('c', 'var(--c1)', 'Capex'))}${panel('Эксплуатационные расходы с начала года', 'млн $', bars('o', 'var(--c2)', 'Opex'))}</div>
+      ${panel('Исполнение ГРПиБ 2026', '', tbl, 'Периоды указаны в таблице.')}
       ${srcNote('листы «Схема РП», «Денежный поток», «ГРПиБ», «Лифтинг затраты» каждой книги; добыча — разделы «Добыча».')}</section>`;
   }
 };
@@ -1891,7 +2010,7 @@ async function exportPPTX(secs) {
     }
     if (t === 'econ') {
       const sl = tSlide('Экономика: исполнение ГРПиБ с начала года', 'млн $');
-      tbl(sl, ['Месторождение', 'Период', 'Capex план', 'Capex факт', 'Исполн.', 'Opex план', 'Opex факт', 'Исполн.', '$/барр.'],
+      tbl(sl, ['Месторождение', 'Период', 'Capex план', 'Capex факт', 'Исполн.', 'Opex план', 'Opex факт', 'Исполн.', 'Удельные OPEX, $/барр.'],
         FIELDS.map((k, i) => { const g = DATA.econ[k].grp, c = grpRow(k, /^Капитальн/), o = grpRow(k, /^(Эксплуатац|Операц)/), u = grpRow(k, /баррель/); return [names[i], g.period, c ? fmt(c.ytdPlan, 1) : '—', c ? fmt(c.ytdFact, 1) : '—', c && c.ytdPlan ? P(c.ytdFact / c.ytdPlan) : '—', o ? fmt(o.ytdPlan, 1) : '—', o ? fmt(o.ytdFact, 1) : '—', o && o.ytdPlan ? P(o.ytdFact / o.ytdPlan) : '—', u && u.ytdFact != null ? fmtF(u.ytdFact, 2) : '—']; }), { colW: [3.33, 1.0, 1.2, 1.2, 1.0, 1.2, 1.2, 1.0, 1.2], fs: 11 });
       const s2 = tSlide('Денежные потоки Республики по годам', 'млн $, факт по 2025 год');
       const yrs = [...new Set(FIELDS.flatMap(k => DATA.econ[k].cash.rows.map(r => r.y)))].filter(y => y >= 2010 && y <= 2025).sort();

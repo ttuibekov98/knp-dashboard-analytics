@@ -762,3 +762,48 @@ details.pj-sec[open] summary::before{content:"▾ "}
 
 /* 9 вкладок помещаются в одну строку */
 @media (min-width:1100px){.tabs button{flex:1 1 auto;padding:13px 6px 11px;font-size:12px;letter-spacing:.01em}}
+
+/* лифтинг затраты */
+.lb-svg{width:100%;height:auto;display:block}
+tr.grp-end td{border-bottom:2px solid var(--rule)}
+.lb-grid{stroke:var(--rule);stroke-dasharray:2 4}
+.lb-ax,.lb-x{font:500 11.5px var(--body);fill:var(--ink-2)}
+.lb-x{font-weight:600;fill:var(--ink)}
+.lb-tot{font:800 15px var(--display);fill:var(--ink)}
+.lb-tl{font:600 10px var(--body);fill:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.lb-sum{margin-left:auto;color:var(--muted)}
+.lb-lab rect{fill:var(--surface);opacity:.85}
+.lb-lab text{font:700 11px var(--body);fill:var(--ink)}
+.lb-bar{transform-box:fill-box;transform-origin:bottom;animation:fxGrowY .8s cubic-bezier(.2,.8,.2,1) backwards}
+.lb-leg{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-bottom:6px}
+.lb-leg span{display:inline-flex;align-items:center;gap:6px}.lb-leg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+/* схема раздела продукции в оформлении заказчика */
+.sc-scroll{background:var(--surface);padding:8px}
+.sc-scroll .fl-svg{min-width:900px;max-width:1440px;margin:0 auto}
+.sc-flow .sc-edge{stroke:#1d1d1d;stroke-width:2}
+.sc-flow .sc-arw{fill:#1d1d1d}
+:root[data-theme="dark"] .sc-flow .sc-edge{stroke:#d8dee8} :root[data-theme="dark"] .sc-flow .sc-arw{fill:#d8dee8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sc-flow .sc-edge{stroke:#d8dee8} :root:not([data-theme="light"]) .sc-flow .sc-arw{fill:#d8dee8}}
+.sc-flow .sc-pct{font:700 18px var(--display);fill:#E8501E}
+.sc-flow .sc-node rect{stroke-width:1.2}
+.sc-flow .sc-node.rev rect{fill:#fff;stroke:#3a3a3a} .sc-flow .sc-node.rev .sc-v{fill:#1d1d1d} .sc-flow .sc-node.rev .sc-l{fill:#333}
+.sc-flow .sc-node.ct rect,.sc-flow .sc-node.pt rect{fill:#F6B89F;stroke:#C77B5E} .sc-flow .sc-node.ct .sc-v,.sc-flow .sc-node.pt .sc-v{fill:#1d1d1d} .sc-flow .sc-node.ct .sc-l,.sc-flow .sc-node.pt .sc-l{fill:#333}
+.sc-flow .sc-node.ct2 rect{fill:#E8501E;stroke:#B83A10} .sc-flow .sc-node.ct2 .sc-v,.sc-flow .sc-node.ct2 .sc-l{fill:#fff}
+.sc-flow .sc-node.cx rect{fill:#A8350E;stroke:#7E2608} .sc-flow .sc-node.cx .sc-v,.sc-flow .sc-node.cx .sc-l{fill:#fff}
+.sc-flow .sc-node.st rect{fill:#B5E59C;stroke:#69B848} .sc-flow .sc-node.st .sc-v{fill:#1d1d1d} .sc-flow .sc-node.st .sc-l{fill:#2e4a20}
+.sc-flow .sc-node.st2 rect{fill:#35C25B;stroke:#25954A} .sc-flow .sc-node.st2 .sc-v,.sc-flow .sc-node.st2 .sc-l{fill:#fff}
+.sc-flow .sc-node.st2{animation:scIn .55s cubic-bezier(.2,.8,.2,1) backwards}
+.sc-flow .sc-node{cursor:pointer;transition:opacity .25s}
+.sc-flow .sc-node:hover rect,.sc-flow .sc-node.on rect{filter:drop-shadow(0 4px 10px rgb(0 0 0/.22));stroke-width:2.2}
+.sc-flow.focus .sc-e.on .sc-edge{stroke-width:3.2}
+
+/* подписи значений на графиках */
+.chart svg text.dl{font:600 10.5px var(--body);fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round;pointer-events:none;font-variant-numeric:tabular-nums}
+.chart svg text.dl-in{font-weight:700}
+.chart svg text.dl.dl-w{fill:#fff;stroke:none}
+.chart svg text.dl-in.dl-p{fill:var(--ink);stroke:var(--surface);stroke-width:2.5px}
+.chart svg text.dl-p{fill:var(--ink-2);font-weight:500}
+.chart svg text.dl-tot{font-weight:800;fill:var(--ink)}
+.chart svg text.dl-ln{font-weight:700}
+@media (max-width:520px){.chart svg text.dl{font-size:9.5px}}
