@@ -294,7 +294,7 @@ function panel(title, unit, body, note, right) {
 }
 function table(cols, rows, opts = {}) {
   // cols: [{t, v:bool}] ; rows: [{cells:[], cls}]
-  return `<div class="tbl-wrap"${opts.max ? ` style="max-height:${opts.max}px;overflow:auto"` : ''}><table><thead><tr>${cols.map(c => `<th${c.v ? ' class="v"' : ''}>${c.t}</th>`).join('')}</tr></thead><tbody>${rows.map(r => {
+  return `<div class="tbl-wrap${opts.fit ? ' tbl-fit' : ''}"${opts.max ? ` style="max-height:${opts.max}px;overflow:auto"` : ''}><table><thead><tr>${cols.map(c => `<th${c.v ? ' class="v"' : ''}>${c.t}</th>`).join('')}</tr></thead><tbody>${rows.map(r => {
     if (r.group) return `<tr class="grp"><td colspan="${cols.length}">${r.group}</td></tr>`;
     return `<tr${r.cls ? ` class="${r.cls}"` : ''}>${r.cells.map((c, i) => `<td${cols[i] && cols[i].v ? ' class="v"' : ''}>${c == null ? '—' : c}</td>`).join('')}</tr>`;
   }).join('')}</tbody></table></div>`;
@@ -375,6 +375,25 @@ try { const t = localStorage.getItem('kmg-theme'); if (t) document.documentEleme
 /* ============================================================
    ГЕОЛОГИЯ
    ============================================================ */
+/* Накопленная добыча нефти, тыс. т: опорное значение из справки («Накопленная добыча на ДД.ММ.ГГГГ») + помесячный факт после этой даты.
+   Так геология, справка и кольца в «Добыче» показывают одну и ту же цифру. */
+function cumOilAnchor(k) {
+  const r = ((DATA.refs || {})[k] || {}).geo; if (!r || !r.rows) return null;
+  for (const row of r.rows) {
+    const m = /Накопленная добыча на (\d{2})\.(\d{2})\.(\d{4})/.exec(String(row[0] || ''));
+    const v = parseFloat(String(row[1]).replace(/[\s\u00a0]/g, '').replace(',', '.').replace(/[^0-9.]/g, ''));
+    if (m && isFinite(v)) { let y = +m[3], mo = +m[2] - 1; if (mo === 0) { mo = 12; y--; } return { v, thru: `${y}-${String(mo).padStart(2, '0')}` }; }
+  }
+  return null;
+}
+function cumOilThrough(k, ym) {
+  const a = cumOilAnchor(k), p = DATA.prod[k]; if (!a || !p || !p.mon.oil) return null;
+  ym = ym || p.last; const ms = p.months, f = p.mon.oil.fact; let v = a.v;
+  ms.forEach((m, i) => { const x = f[i] || 0; if (m > a.thru && m <= ym) v += x; else if (m > ym && m <= a.thru) v -= x; });
+  return { v, ym };
+}
+const cumDateLabel = ym => { let y = +ym.slice(0, 4), m = +ym.slice(5) + 1; if (m > 12) { m = 1; y++; } return `01.${String(m).padStart(2, '0')}.${y}`; };
+
 const GEO_COLS = {
   geoOil: { t: 'Геол. запасы нефти, млн т', d: 1 }, recOil: { t: 'Извл. запасы нефти, млн т', d: 1 },
   geoGas: { t: 'Геол. запасы газа, млрд м³', d: 1 }, recGas: { t: 'Извл. запасы газа, млрд м³', d: 1 },
@@ -397,7 +416,9 @@ RENDER.geo = {
     if (t.recGas != null) ks.push({ l: 'Извлекаемые запасы газа', v: fmt(t.recGas, 1), u: 'млрд м³', s: `геологические — ${fmt(t.geoGas, 1)} млрд м³` });
     if (t.kin0 != null) ks.push({ l: g.kinNote ? 'КИН утверждённый / текущий' : 'КИН начальный / текущий', v: `${fmtF(t.kin0, 3)} / ${fmtF(t.kin, 3)}`, s: t.kin0 ? `выработано ${pct(t.kin / t.kin0, 0)} от проектного КИН` : '' });
     else if (k === 'Y') { const y = g.objects[0]; ks.push({ l: 'КИН утв. / тек. (участок Y)', v: `${fmtF(y.kin0, 3)} / ${fmtF(y.kin, 3)}`, s: 'текущий КИН на 01.01.2026' }); }
-    if (t.cum != null) ks.push({ l: 'Накопленная добыча нефти', v: fmt(t.cum, 2), u: 'млн т', s: `текущие извлекаемые — ${fmt(t.curRec, 2)} млн т` });
+    const cu = t.cum != null ? cumOilThrough(k) : null;
+    if (cu) ks.push({ l: `Накопленная добыча нефти на ${cumDateLabel(cu.ym)}`, v: fmt(cu.v / 1000, 2), u: 'млн т', s: `остаточные извлекаемые — ${fmt(t.recOil - cu.v / 1000, 2)} млн т` });
+    else if (t.cum != null) ks.push({ l: 'Накопленная добыча нефти', v: fmt(t.cum, 2), u: 'млн т', s: `текущие извлекаемые — ${fmt(t.curRec, 2)} млн т` });
     const objs = g.objects;
     const lab = o => `${o.obj.replace('Объект ', '')}${objs.some(x => x.obj === o.obj && x !== o) ? ' · ' + o.cat : ''}`;
     const oilChart = chartBox({
@@ -423,7 +444,7 @@ RENDER.geo = {
     const cols = g.cols.filter(c => detail.concat(g.totals).some(o => o[c] != null));
     const tbl = table([{ t: g.objLabel }, { t: 'Категория' }].concat(cols.map(c => ({ t: GEO_COLS[c].t, v: true }))),
       detail.map(o => ({ cells: [esc(o.obj), esc(o.cat)].concat(cols.map(c => o[c] == null ? null : fmtF(o[c], GEO_COLS[c].d))) }))
-        .concat(g.totals.map(o => ({ cls: 'tot', cells: [esc(o.obj), esc(o.cat)].concat(cols.map(c => o[c] == null ? null : fmtF(o[c], GEO_COLS[c].d))) }))));
+        .concat(g.totals.map(o => ({ cls: 'tot', cells: [esc(o.obj), esc(o.cat)].concat(cols.map(c => o[c] == null ? null : fmtF(o[c], GEO_COLS[c].d))) }))), { fit: true });
     let html = secHead(`Геология · ${FN(k)}`, 'Запасы нефти и газа по объектам подсчёта и категориям, коэффициенты извлечения.') + kpis(ks) +
       `<div class="grid2">${panel('Запасы нефти по объектам', 'млн т', oilChart)}${gasChart}</div>` +
       `<h3 class="sub-h">Запасы по объектам и категориям</h3>${tbl}`;
@@ -549,7 +570,7 @@ RENDER.prod = {
     });
     let html = secHead(`Добыча · ${FN(k)}`, `Помесячный план-факт ${yearsAv.length > 2 ? `${yearsAv[yearsAv.length - 1]}–2026` : '2025–2026'} и многолетняя динамика. Последний месяц с фактом — ${mLong(p.last)}.`,
       seg('prodKey' + k, keys.map(kk => ({ v: kk, t: p.mon[kk].name })), key, '')) + ks +
-      `<div class="grid2">${panel(`${s.name} по месяцам, ${yr}`, s.unit, monChart, 'Заштриховано — план, сплошная заливка — факт.', (yearsAv.length > 2 ? ysel('prodYear', yearsAv, yr) : seg('prodYear', [{ v: '2025', t: '2025' }, { v: '2026', t: '2026' }], yr)))}
+      `<div class="grid2">${panel(`${s.name} по месяцам, ${yr}`, s.unit, monChart, '', (yearsAv.length > 2 ? ysel('prodYear', yearsAv, yr) : seg('prodYear', [{ v: '2025', t: '2025' }, { v: '2026', t: '2026' }], yr)))}
        ${panel('Добыча по годам', aUnit, annChart, `2026 — годовой план. ${p.annualSrc}`, seg('prodAnn', [{ v: 'oil', t: 'Нефть' }, { v: 'gas', t: 'Газ' }], aKey))}</div>
        ${EXTRA.prodField(k, key, st)}<h3 class="sub-h">План-факт по продуктам, ${ytdLabel(st.months)}</h3>` +
       table([{ t: 'Продукт' }, { t: 'Ед. изм.' }, { t: 'План', v: true }, { t: 'Факт', v: true }, { t: 'Откл.', v: true }, { t: 'Выполнение', v: true }, { t: 'План 2026', v: true }, { t: 'Факт 2025', v: true }], rows);
@@ -1016,7 +1037,7 @@ RENDER.lc = {
       series: [{ name: 'Затраты на МС', color: FC(k), values: dyn.map(d => d.ms), unit: 'млн $' }, { name: 'Доля МС в общих затратах', color: 'var(--ink-2)', kind: 'line', axis: 'right', values: dyn.map(d => d.share == null ? null : d.share * 100) }],
       rFmt: v => fmt(v) + '%', tipFmt: (v, s) => s.axis === 'right' ? fmtF(v, 1) + '%' : fmt(v, 1) + ' млн $', rZero: true
     });
-    html += `<div class="grid2">${panel('Доля МС в закупках ТРУ', '%', truChart, hasPlan ? 'Заштриховано — план, сплошная заливка — факт.' : '')}${panel('Затраты на МС и их доля', 'млн $ · %', dynChart, k === 'Y' ? 'В источнике значения одинаковы за все годы (400 млн $ и 60%) — вероятно, это заглушка.' : '')}</div>`;
+    html += `<div class="grid2">${panel('Доля МС в закупках ТРУ', '%', truChart, '')}${panel('Затраты на МС и их доля', 'млн $ · %', dynChart, k === 'Y' ? 'В источнике значения одинаковы за все годы (400 млн $ и 60%) — вероятно, это заглушка.' : '')}</div>`;
     // nationalization chart
     const nr = nat.rows.filter(r => r.slice(1).some(v => v != null && v !== 0));
     const countCols = nat.cols.map((c, i) => i + 1).filter(i => i !== natShareIdx && !/Руководство/.test(nat.cols[i - 1]));
@@ -1410,7 +1431,10 @@ function mainVal(k, y, i) {
   if (y === '2026' && i < 2) { const mm = DATA.prod[k].mon[i ? 'agas' : 'oil']; return mm ? sum(mm.fact.slice(12).map(x => x || 0)) : null; }
   const row = ((DATA.econMain || { rows: {} }).rows[k] || {})[y]; return row ? row[i] : null;
 }
-const mainSum = (k, r, i) => sum(mainYears().filter(y => +y >= r.from && +y <= r.to).map(y => mainVal(k, y, i) || 0));
+const mainSum = (k, r, i) => {
+  if (i === 0 && r.from <= +mainYears()[0] && r.to >= 2026) { const c = cumOilThrough(k); if (c) return c.v; }
+  return sum(mainYears().filter(y => +y >= r.from && +y <= r.to).map(y => mainVal(k, y, i) || 0));
+};
 function mainDonut(r, i, unit, title, note) {
   const vals = FIELDS.map(k => mainSum(k, r, i));
   return panel(title, unit, donut(FIELDS.map((k, n) => ({ label: FS(k), v: Math.max(0, vals[n]), color: FC(k), text: `${fm(vals[n])} ${unit}` })), { v: fm(sum(vals)), l: unit }), note);
@@ -1419,7 +1443,9 @@ function prodDonuts() {
   const ys = mainYears(), r = yrRange('pMain', ys, [ys[0], '2026']);
   const n26 = MONTHS26.filter(m => m <= DATA.prod.D.last).length;
   const note = `${r.from}–${Math.min(r.to, 2025)} — по шаблону «Главная страница экономика КНП»; 2026 год — факт за ${n26} мес. из помесячных данных.`;
-  return `<h3 class="sub-h">Накопленная добыча</h3><div class="econ-range">${r.html}</div><div class="econ-donuts">${mainDonut(r, 0, 'тыс. т', 'Добыча нефти', note)}${mainDonut(r, 1, 'млн м³', 'Добыча газа', note)}</div>`;
+  const cuD = r.from <= +ys[0] && r.to >= 2026 ? cumOilThrough('D') : null;
+  const noteCum = cuD ? ` Дунга за весь период — по справочному значению накопленной добычи (на ${cumDateLabel(cuD.ym)}) плюс факт последующих месяцев.` : '';
+  return `<h3 class="sub-h">Накопленная добыча</h3><div class="econ-range">${r.html}</div><div class="econ-donuts">${mainDonut(r, 0, 'тыс. т', 'Добыча нефти', note + noteCum)}${mainDonut(r, 1, 'млн м³', 'Добыча газа', note)}</div>`;
 }
 
 /* --- Free cash flow и цена безубыточности (шаблон «Главная страница экономика КНП») --- */
@@ -2453,5 +2479,3 @@ function startApp() {
   });
   setTimeout(() => pw.focus(), 300);
 })();
-
-

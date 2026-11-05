@@ -954,3 +954,13 @@ tr.ind-pct td{font-style:italic;color:var(--ink-2)}
 .pj-mini .pj-stage{align-self:flex-start}
 @media (max-width:900px){.pj-pipe{grid-template-columns:repeat(2,minmax(0,1fr))}.ph3{flex-direction:column}.ph3-arr{transform:rotate(90deg)}}
 @media (prefers-reduced-motion:reduce){.pj3,.pf3,.pp-item,.ph3-c,.ph3-bar i,.pj-stage::before{animation:none!important}}
+
+/* Таблица «Запасы по объектам и категориям»: шире контейнера и без горизонтального скролла */
+.tbl-fit th,.tbl-fit td{white-space:normal;padding:8px 10px}
+.tbl-fit th{line-height:1.25;vertical-align:bottom}
+.tbl-fit td.v{white-space:nowrap}
+@media (min-width:901px){
+  .tbl-wrap.tbl-fit{overflow:visible}
+  #main section>.tbl-fit{width:min(1680px,calc(100vw - 48px));margin-left:calc(50% - min(840px,50vw - 24px))}
+}
+
