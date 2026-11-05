@@ -1914,7 +1914,7 @@ function pjPhases(k) {
     <div class="ph3-t">до <b>${fmt(p.tpd)}</b> т нефти в сутки <small>${esc(p.bpd)}</small></div></div>`).join('')}</div>`);
 }
 function pjCard(k, p, i) {
-  const c = k ? FC(k) : '#8291A5', b = k ? pjGrp(k, p.grp) : null, book = k ? pjBook(k, p.book) : null;
+  const c = k ? FC(k) : '#8291A5', b = k ? pjGrp(k, p.grp) : null;
   const res = p.reserves ? `<div class="pj-res">${p.reserves.map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>${p.resNote ? `<p class="pj-resn">${esc(p.resNote)}</p>` : ''}` : '';
   const prog = p.progress != null ? `<div class="pj-prog" title="прогресс">${rings([{ label: p.progressLabel || 'прогресс', r: p.progress, text: pct(p.progress, 0), color: PJ_SC[p.stage] }])}</div>` : '';
   return `<article class="pj3" id="pj-${esc(p.id)}" style="--c:${c};--s:${PJ_SC[p.stage] || '#8291A5'};--i:${i}">
@@ -1925,13 +1925,12 @@ function pjCard(k, p, i) {
     ${p.status && p.status.length ? `<div class="pj-stl"><span class="pj-k">Текущий статус</span><ul>${p.status.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
     <div class="pj-more-wrap">
       ${p.scope ? `<details><summary>Объём работ</summary><ul class="pj-scope">${p.scope.map(t => `<li>${esc(t)}</li>`).join('')}</ul></details>` : ''}
-      ${book ? `<details><summary>Из книги проекта${book.name !== p.name ? ` («${esc(book.name)}»)` : ''}</summary>${book.desc ? `<p><b>Описание.</b> ${pjText(book.desc)}</p>` : ''}${book.status ? `<p><b>Оценка и статус.</b> ${pjText(book.status)}</p>` : ''}${book.notes ? `<p><b>Основные моменты и риски.</b> ${pjText(book.notes)}</p>` : ''}${book.done ? `<p><b>Завершённые проекты.</b> ${pjText(book.done)}</p>` : ''}</details>` : ''}
     </div></article>`;
 }
 RENDER.proj = {
   field(k) {
     const D_ = pjDeck(k);
-    let html = secHead(`Проекты · ${FN(k)}`, D_ ? 'Стадия, суть, финансовые показатели и статус — по презентации «Инвпроекты ДКНП»; бюджет 2026 года — из ГРПиБ; тексты книги — в «Из книги проекта».' : 'Данные из книги проекта.');
+    let html = secHead(`Проекты · ${FN(k)}`, D_ ? 'Стадия, суть, финансовые показатели и статус — по презентации «Инвпроекты ДКНП»; бюджет 2026 года — из ГРПиБ.' : 'Данные из книги проекта.');
     html += pjPhases(k);
     if (D_) html += `<div class="pj-list">${D_.map((p, i) => pjCard(k, p, i)).join('')}</div>`;
     else html += RENDER_PROJ_BOOK(k);
